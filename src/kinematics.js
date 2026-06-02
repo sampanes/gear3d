@@ -16,9 +16,10 @@ import { TAU, mod, clamp, smootherstep } from './math.js';
 //   gamma = PI/2 - beta      half the driver rotation during engagement
 //   s     = sin(beta)        crank radius / center distance  (a = c * s)
 //
-// During engagement the slot stays radial, so the star angle relative to the
-// line of centers is  phi = atan2(s*sin x, 1 - s*cos x),  x = driver angle from
-// the engagement centre. This reaches +/-beta exactly at x = +/-gamma, and its
+// During engagement the slot stays radial. An external Geneva counter-rotates,
+// so a CCW driver turns the star CW: the star angle relative to the line of
+// centers is  phi = -atan2(s*sin x, 1 - s*cos x),  x = driver angle from the
+// engagement centre. This reaches -/+beta exactly at x = +/-gamma, and its
 // derivative is zero there — the pin enters and leaves with no angular shock.
 export function genevaGeometry(n) {
   const beta = Math.PI / n;
@@ -39,15 +40,15 @@ export function genevaStarAngle(theta, n) {
   const { beta, gamma, crankRatio: s } = genevaGeometry(n);
   const k = Math.round(theta / TAU); // which index cycle we are in/near
   const x = theta - k * TAU; // driver angle relative to this cycle's centre, [-PI, PI]
-  const station = k * 2 * beta; // star angle accumulated by completed indexes
+  const station = -k * 2 * beta; // star angle accumulated by completed indexes (CW)
 
   if (Math.abs(x) <= gamma) {
-    // engaged: pin is in the slot, star is driven
-    const phi = Math.atan2(s * Math.sin(x), 1 - s * Math.cos(x));
+    // engaged: pin is in the slot, star is driven (counter to the driver)
+    const phi = -Math.atan2(s * Math.sin(x), 1 - s * Math.cos(x));
     return { angle: station + phi, engaged: true };
   }
   // dwell: star is locked at the station it last reached on this side
-  return { angle: station + (x > 0 ? beta : -beta), engaged: false };
+  return { angle: station + (x > 0 ? -beta : beta), engaged: false };
 }
 
 // ---------------------------------------------------------------------------

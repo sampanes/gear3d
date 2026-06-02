@@ -62,8 +62,9 @@ export function gearContour(params, stepsPerFlank = 14) {
     for (let k = 1; k <= tipSteps; k++) {
       push(ra, c - psiTip + 2 * psiTip * (k / tipSteps));
     }
-    // down the leading (+) flank, tip -> base
-    for (let k = stepsPerFlank; k >= 0; k--) {
+    // down the leading (+) flank, tip -> base (start one step in: the tip arc
+    // already emitted the rho=ra vertex, so re-emitting it makes a zero-length edge)
+    for (let k = stepsPerFlank - 1; k >= 0; k--) {
       const rho = rStart + (ra - rStart) * (k / stepsPerFlank);
       push(rho, c + psi(rho));
     }
@@ -75,7 +76,9 @@ export function gearContour(params, stepsPerFlank = 14) {
     for (let k = 1; k <= rootSteps; k++) {
       push(rootR, a0 + (a1 - a0) * (k / rootSteps));
     }
-    if (rootR < rStart) push(rStart, a1);
+    // The radial climb back to the base circle at angle a1 is supplied by the
+    // next tooth's first trailing-flank vertex (and by the Shape auto-close on
+    // the last tooth), so emitting it here would just duplicate that vertex.
   }
   return pts;
 }

@@ -19,6 +19,10 @@ npm run build    # static bundle in dist/
 npm run preview  # serve the built bundle
 ```
 
+```bash
+npm test         # kinematics + involute-geometry unit tests (node:test, no deps)
+```
+
 ## Controls
 
 | Input | Action |
@@ -31,6 +35,13 @@ npm run preview  # serve the built bundle
 
 Everything else lives in the top-right panel: pick the mechanism, set speed
 (negative reverses), and tune each mechanism's parameters live.
+
+**Export** — the panel's **Export (STL)** folder downloads the current mechanism
+as a single binary STL, ready for slicing and 3D printing. Model units are
+millimetres, and the **scale ×** field applies one uniform multiplier (`1` = 1 mm)
+to the whole export. Because the entire assembly exports together, every part
+stays matched to every other — set the scale once and you never have to resize
+parts individually.
 
 ## Mechanisms
 

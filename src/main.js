@@ -6,7 +6,8 @@ import * as THREE from 'three';
 import { createViewer, frame } from './scene.js';
 import { buildGUI } from './ui.js';
 import { setWireframe } from './parts.js';
-import { TAU } from './math.js';
+import { saveSTL } from './export.js';
+import { TAU, mod } from './math.js';
 import { SpurTrain } from './mechanisms/spurTrain.js';
 import { Geneva } from './mechanisms/geneva.js';
 import { DoubleGeneva } from './mechanisms/doubleGeneva.js';
@@ -19,6 +20,7 @@ const config = {
   spur: { gears: 3, t1: 12, t2: 24, t3: 18, t4: 15, t5: 30, module: 5, pressureAngle: 20, thickness: 8 },
   geneva: { slots: 4, centerDistance: 100 },
   double: { amplitude: 35, pushFrac: 0.62, size: 100 },
+  export: { scale: 1.0 }, // uniform STL multiplier; model units are mm
 };
 
 const canvas = document.getElementById('app');
@@ -49,9 +51,18 @@ const actions = {
   rebuild: build,
   frame: () => mechanism && frame(viewer.camera, viewer.controls, mechanism.group),
   resetView: () => {
+    // Snap back to the exact home pose. (Don't call frame() here — it would
+    // recompute the position from the home direction and overwrite HOME.)
     viewer.camera.position.copy(HOME);
     viewer.controls.target.set(0, 0, 0);
-    actions.frame();
+    viewer.controls.update();
+  },
+  exportSTL: () => {
+    if (!mechanism) return;
+    const name = config.mode.toLowerCase().replace(/\s+/g, '-');
+    const s = config.export.scale;
+    const tag = s === 1 ? '' : `-x${s}`; // record the scale in the filename
+    saveSTL(mechanism.group, `gear3d-${name}${tag}.stl`, s);
   },
 };
 
@@ -76,7 +87,7 @@ function tick() {
   mechanism.update(driverAngle);
 
   const rpm = (config.speed * 60).toFixed(0);
-  readout.textContent = `driver ${((driverAngle % TAU) / TAU * 360).toFixed(0).padStart(3)}°   ${rpm} rpm\n${mechanism.info()}`;
+  readout.textContent = `driver ${(mod(driverAngle, TAU) / TAU * 360).toFixed(0).padStart(3)}°   ${rpm} rpm\n${mechanism.info()}`;
 
   viewer.controls.update();
   viewer.renderer.render(viewer.scene, viewer.camera);

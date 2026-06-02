@@ -5,7 +5,7 @@
 // short dwell at each extreme.
 
 import * as THREE from 'three';
-import { DEG, TAU } from '../math.js';
+import { DEG } from '../math.js';
 import { doubleGenevaOutput, doubleGenevaPinOffset } from '../kinematics.js';
 import { PALETTE, metal, disc, pin, disposeObject } from '../parts.js';
 

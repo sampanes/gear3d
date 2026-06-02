@@ -23,13 +23,16 @@ export class SpurTrain {
       if (i > 0) x += prevR + m.r; // center distance r_{i-1} + r_i
       prevR = m.r;
 
+      // Keep the bore strictly inside the root circle so it never punches
+      // through the teeth on a tiny pinion (only bites below the GUI ranges).
+      const safeBore = Math.min(bore, m.rf * 0.6);
       const color = i === 0 ? PALETTE.driver : PALETTE.driven;
-      const gear = makeGear(gp, color, { thickness: p.thickness, bore });
+      const gear = makeGear(gp, color, { thickness: p.thickness, bore: safeBore });
       gear.position.set(x, 0, 0);
       this.group.add(gear);
       this.gears.push(gear);
 
-      const shaft = disc(bore * 0.92, p.thickness * 1.6, PALETTE.shaft, {
+      const shaft = disc(safeBore * 0.92, p.thickness * 1.6, PALETTE.shaft, {
         metalness: 0.85,
         rough: 0.3,
       });

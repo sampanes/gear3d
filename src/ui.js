@@ -22,6 +22,11 @@ export function buildGUI(config, actions) {
   view.add(actions, 'frame').name('frame view (F)');
   view.add(actions, 'resetView').name('reset camera');
 
+  // ----- Export -----
+  const exp = gui.addFolder('Export (STL)');
+  exp.add(config.export, 'scale', 0.1, 10, 0.01).name('scale × (1 = mm)');
+  exp.add(actions, 'exportSTL').name('export STL ⤓');
+
   // ----- Spur train -----
   const spur = gui.addFolder('Spur train');
   const teethCtrls = [];
