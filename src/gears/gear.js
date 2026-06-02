@@ -1,9 +1,9 @@
 // Builds a 3D spur-gear mesh from involute parameters.
 
 import * as THREE from 'three';
-import { gearContour, gearMetrics } from './involute.js';
+import { gearContour, gearMetrics, internalGearContour, internalGearMetrics } from './involute.js';
 import { metal } from '../parts.js';
-import { DEG } from '../math.js';
+import { DEG, TAU } from '../math.js';
 
 // Returns an extruded BufferGeometry centred on Z, axis along +Z. A non-zero
 // `helix` angle (degrees) twists the extrusion into a helical gear; the sign
@@ -65,5 +65,40 @@ export function makeGear(params, color, opts = {}) {
   mesh.castShadow = mesh.receiveShadow = true;
   pivot.add(mesh);
   pivot.userData.metrics = gearMetrics(params);
+  return pivot;
+}
+
+// A ring (internal) gear: a plain outer rim with the inward-pointing tooth
+// profile cut out as a hole. Returns a BufferGeometry centred on Z, axis +Z.
+export function ringGearGeometry(params, { thickness = 8 } = {}) {
+  const { rOuter } = internalGearMetrics(params);
+  const shape = new THREE.Shape();
+  shape.absarc(0, 0, rOuter, 0, TAU, false); // outer rim, CCW
+  const hole = new THREE.Path();
+  // the contour is CCW; a hole must wind opposite the shape, so reverse it
+  hole.setFromPoints(internalGearContour(params).reverse());
+  shape.holes.push(hole);
+  const bevel = Math.min(0.5, thickness * 0.08);
+  const geo = new THREE.ExtrudeGeometry(shape, {
+    depth: thickness - 2 * bevel,
+    bevelEnabled: true,
+    bevelThickness: bevel,
+    bevelSize: bevel,
+    bevelSegments: 1,
+    steps: 1,
+    curveSegments: 128,
+  });
+  geo.translate(0, 0, -thickness / 2 + bevel);
+  geo.computeVertexNormals();
+  return geo;
+}
+
+// A ring-gear mesh wrapped in a pivot Object3D (rotate `.rotation.z` to spin).
+export function makeRingGear(params, color, opts = {}) {
+  const pivot = new THREE.Object3D();
+  const mesh = new THREE.Mesh(ringGearGeometry(params, opts), metal(color, opts.material));
+  mesh.castShadow = mesh.receiveShadow = true;
+  pivot.add(mesh);
+  pivot.userData.metrics = internalGearMetrics(params);
   return pivot;
 }

@@ -67,6 +67,14 @@ extreme by the first wheel's pin, then half a revolution later back the other
 way by the second wheel's pin — so it **toggles back and forth in place**, with
 a short dwell at each end. Tune the swing, the push/dwell split, and the size.
 
+### Internal gear
+A pinion (driver) meshing **inside** a ring (internal) gear. Internal pairs turn
+the **same** direction, and the ring turns slower by `z_pinion / z_ring`; the
+pinion sits at center distance `(z_ring − z_pinion)·module/2` so the pitch
+circles touch. The ring's teeth point inward — addendum and dedendum swap, so
+the tip is the inner radius and the root opens out into the rim. Tune pinion and
+ring teeth, module, pressure angle, and thickness.
+
 ## Layout
 
 ```
@@ -84,4 +92,5 @@ src/
     spurTrain.js
     geneva.js
     doubleGeneva.js
+    internalGear.js
 ```

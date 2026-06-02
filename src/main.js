@@ -11,6 +11,7 @@ import { TAU, mod } from './math.js';
 import { SpurTrain } from './mechanisms/spurTrain.js';
 import { Geneva } from './mechanisms/geneva.js';
 import { DoubleGeneva } from './mechanisms/doubleGeneva.js';
+import { InternalGear } from './mechanisms/internalGear.js';
 
 const config = {
   mode: 'Spur train',
@@ -20,6 +21,7 @@ const config = {
   spur: { gears: 3, t1: 12, t2: 24, t3: 18, t4: 15, t5: 30, module: 5, pressureAngle: 20, thickness: 8, helix: 0 },
   geneva: { slots: 4, centerDistance: 100 },
   double: { amplitude: 35, pushFrac: 0.62, size: 100 },
+  internal: { module: 4, pinionTeeth: 12, ringTeeth: 48, pressureAngle: 20, thickness: 8 },
   export: { scale: 1.0 }, // uniform STL multiplier; model units are mm
 };
 
@@ -39,8 +41,10 @@ function build() {
     mechanism = new SpurTrain({ teeth, module: s.module, pressureAngle: s.pressureAngle, thickness: s.thickness });
   } else if (config.mode === 'Geneva') {
     mechanism = new Geneva(config.geneva);
-  } else {
+  } else if (config.mode === 'Double Geneva') {
     mechanism = new DoubleGeneva(config.double);
+  } else {
+    mechanism = new InternalGear(config.internal);
   }
   viewer.scene.add(mechanism.group);
   setWireframe(config.wireframe);

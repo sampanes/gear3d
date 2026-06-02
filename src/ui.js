@@ -8,7 +8,7 @@ export function buildGUI(config, actions) {
   const gui = new GUI({ title: 'gear3d' });
 
   gui
-    .add(config, 'mode', ['Spur train', 'Geneva', 'Double Geneva'])
+    .add(config, 'mode', ['Spur train', 'Geneva', 'Double Geneva', 'Internal gear'])
     .name('mechanism')
     .onChange(() => {
       refresh();
@@ -55,7 +55,15 @@ export function buildGUI(config, actions) {
   dbl.add(config.double, 'pushFrac', 0.3, 1, 0.01).name('push fraction').onChange(actions.rebuild);
   dbl.add(config.double, 'size', 50, 200, 1).onChange(actions.rebuild);
 
-  const folders = { 'Spur train': spur, Geneva: gen, 'Double Geneva': dbl };
+  // ----- Internal gear -----
+  const int = gui.addFolder('Internal gear');
+  int.add(config.internal, 'pinionTeeth', 8, 30, 1).name('pinion teeth').onChange(actions.rebuild);
+  int.add(config.internal, 'ringTeeth', 32, 120, 1).name('ring teeth').onChange(actions.rebuild);
+  int.add(config.internal, 'module', 2, 12, 0.5).onChange(actions.rebuild);
+  int.add(config.internal, 'pressureAngle', 14.5, 25, 0.5).name('pressure angle').onChange(actions.rebuild);
+  int.add(config.internal, 'thickness', 2, 20, 0.5).onChange(actions.rebuild);
+
+  const folders = { 'Spur train': spur, Geneva: gen, 'Double Geneva': dbl, 'Internal gear': int };
 
   function refreshTeeth() {
     teethCtrls.forEach((c, i) => c.show(i < config.spur.gears));

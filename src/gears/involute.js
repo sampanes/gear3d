@@ -91,3 +91,77 @@ export function gearContour(params, stepsPerFlank = 14) {
   }
   return pts;
 }
+
+// ---------------------------------------------------------------------------
+// Internal (ring) gear
+// ---------------------------------------------------------------------------
+// An internal gear is an annular rim with teeth pointing inward. Addendum and
+// dedendum swap versus an external gear: the tip is the INNER radius (ra = r-m)
+// and the root opens OUT into the rim (rf = r+1.25m). The flank is the same
+// involute of the base circle.
+export function internalGearMetrics({ module: m, teeth: z, pressureAngle = 20, rim = 3 }) {
+  const alpha = pressureAngle * DEG;
+  const r = (m * z) / 2;
+  const rb = r * Math.cos(alpha);
+  const ra = r - m; // tooth tip (points inward)
+  const rf = r + 1.25 * m; // tooth root (out into the rim)
+  const rOuter = rf + rim * m; // outer rim radius
+  return { m, z, alpha, r, rb, ra, rf, rOuter };
+}
+
+// Inner toothed boundary of an internal gear as THREE.Vector2[], wound CCW and
+// closed. The tooth angular half-width is phi(rho) = pitch/2 - psi(rho): equal
+// to an external tooth at the pitch circle, but it widens toward the outer root
+// and narrows to the inner tip — the radial negative of an external tooth. Use
+// this as a (reversed) hole inside a plain outer-rim circle.
+export function internalGearContour(params, stepsPerFlank = 14) {
+  const { z, alpha, rb, ra, rf } = internalGearMetrics(params);
+  const pitch = TAU / z;
+  const halfPitch = Math.PI / z;
+  const halfTooth = Math.PI / (2 * z);
+  const invAlpha = involute(alpha);
+
+  const rIn = Math.max(ra, rb); // the involute (hence the flank) stops at rb
+  const rOut = rf;
+
+  // tooth angular half-width at radius rho: narrow at the inner tip, wide at root
+  const phi = (rho) => {
+    const ar = Math.acos(Math.min(1, rb / rho));
+    return halfPitch - (halfTooth + invAlpha - involute(ar));
+  };
+
+  const pts = [];
+  const push = (rho, ang) => pts.push(new THREE.Vector2(rho * Math.cos(ang), rho * Math.sin(ang)));
+
+  const phiIn = phi(rIn);
+  const phiOut = phi(rOut);
+  const tipSteps = 4;
+  const gapSteps = 5;
+
+  for (let i = 0; i < z; i++) {
+    const c = i * pitch; // tooth centre line
+
+    // left flank: outer root -> inner tip, angle c - phi(rho)
+    for (let k = 0; k <= stepsPerFlank; k++) {
+      const rho = rOut + (rIn - rOut) * (k / stepsPerFlank);
+      push(rho, c - phi(rho));
+    }
+    // inner tip arc, -phiIn -> +phiIn (skip first; the left flank emitted it)
+    for (let k = 1; k <= tipSteps; k++) {
+      push(rIn, c - phiIn + 2 * phiIn * (k / tipSteps));
+    }
+    // right flank: inner tip -> outer root, angle c + phi(rho) (skip first)
+    for (let k = 1; k <= stepsPerFlank; k++) {
+      const rho = rIn + (rOut - rIn) * (k / stepsPerFlank);
+      push(rho, c + phi(rho));
+    }
+    // recess (gap) arc at the outer root across to the next tooth; stop one short
+    // so the next tooth's left-flank base supplies the final vertex (no duplicate).
+    const g0 = c + phiOut;
+    const g1 = c + pitch - phiOut;
+    for (let k = 1; k <= gapSteps - 1; k++) {
+      push(rOut, g0 + (g1 - g0) * (k / gapSteps));
+    }
+  }
+  return pts;
+}

@@ -132,3 +132,14 @@ export function spurGearAngle(i, theta0, teethList, phases) {
   const ratio = (i % 2 === 0 ? 1 : -1) * (teethList[0] / teethList[i]);
   return phases[i] + ratio * theta0;
 }
+
+// ---------------------------------------------------------------------------
+// Internal gear pair
+// ---------------------------------------------------------------------------
+// A pinion (external, driver) meshes inside a ring (internal, driven). Unlike
+// an external pair the two turn in the SAME direction, and tooth counts give
+//   omega_ring / omega_pinion = z_pinion / z_ring
+// (the ring turns slower). The centre distance is (z_ring - z_pinion)*module/2.
+export function internalGearRatio(zPinion, zRing) {
+  return zPinion / zRing;
+}

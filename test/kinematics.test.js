@@ -11,6 +11,7 @@ import {
   doubleGenevaPinOffset,
   spurTrainPhases,
   spurGearAngle,
+  internalGearRatio,
 } from '../src/kinematics.js';
 
 const near = (a, b, eps = 1e-9, msg = '') => assert.ok(Math.abs(a - b) <= eps, `${msg} ${a} !~= ${b}`);
@@ -204,4 +205,14 @@ test('spur train: teeth interlock (tooth-in-gap) and the interlock is PRESERVED 
       }
     }
   }
+});
+
+// ---------------------------------------------------------------------------
+// Internal gear pair
+// ---------------------------------------------------------------------------
+test('internalGearRatio: ring turns slower by z_pinion/z_ring, same direction', () => {
+  near(internalGearRatio(12, 48), 0.25);
+  near(internalGearRatio(20, 60), 1 / 3);
+  // same sign as the pinion (positive) -> same direction, and |ratio| < 1
+  assert.ok(internalGearRatio(12, 48) > 0 && internalGearRatio(12, 48) < 1);
 });
