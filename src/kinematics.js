@@ -106,8 +106,8 @@ export function doubleGenevaPinOffset(pushFrac = 0.62) {
 // rotation each gear needs so a tooth of one sits in a space of its neighbour.
 
 // Angular position within a gear's tooth pitch, 0 = tooth centre, 0.5 = gap
-// centre, for the gear pointing in world direction `dir`.
-function toothPhaseAt(phase, dir, teeth) {
+// centre, for the gear (rotated by `phase`) pointing in world direction `dir`.
+export function toothPhaseAt(phase, dir, teeth) {
   const pitch = TAU / teeth;
   return mod(dir - phase, pitch) / pitch;
 }
@@ -142,4 +142,49 @@ export function spurGearAngle(i, theta0, teethList, phases) {
 // (the ring turns slower). The centre distance is (z_ring - z_pinion)*module/2.
 export function internalGearRatio(zPinion, zRing) {
   return zPinion / zRing;
+}
+
+// ---------------------------------------------------------------------------
+// Planetary (epicyclic) gearset
+// ---------------------------------------------------------------------------
+// A sun (external), N planets (external) and a ring (internal), with the planets
+// carried on a rotating carrier. With equal module the ring has
+//   zRing = zSun + 2*zPlanet
+// and the planet centres orbit at radius (zSun + zPlanet)*module/2. The motion
+// obeys the fundamental train equation (carrier as reference frame):
+//   (w_sun - w_carrier) / (w_ring - w_carrier) = -zRing / zSun
+//
+// `fixed` holds one member; the natural input is driven by `theta`:
+//   'ring'    -> sun is the input,     carrier the output (classic reduction)
+//   'carrier' -> sun is the input,     ring the output (direction reverses)
+//   'sun'     -> carrier is the input, ring the output
+// Returns absolute angles { sun, ring, carrier, planetSpin, zRing }, where
+// planetSpin is a planet's rotation about its own axis in the world frame.
+export function planetaryAngles(theta, zSun, zPlanet, fixed = 'ring') {
+  const zRing = zSun + 2 * zPlanet;
+  let sun;
+  let ring;
+  let carrier;
+  if (fixed === 'ring') {
+    ring = 0;
+    sun = theta;
+    carrier = (theta * zSun) / (zSun + zRing);
+  } else if (fixed === 'carrier') {
+    carrier = 0;
+    sun = theta;
+    ring = (-theta * zSun) / zRing;
+  } else {
+    // sun fixed; the carrier is the input
+    sun = 0;
+    carrier = theta;
+    ring = (theta * (zSun + zRing)) / zRing;
+  }
+  // planet spin about its own centre: (wp - wc)/(ws - wc) = -zSun/zPlanet
+  const planetSpin = carrier - (zSun / zPlanet) * (sun - carrier);
+  return { sun, ring, carrier, planetSpin, zRing };
+}
+
+// Equal-spaced planets all mesh only if this is an integer (assembly condition).
+export function planetaryAssembly(zSun, zRing, nPlanets) {
+  return (zSun + zRing) / nPlanets;
 }

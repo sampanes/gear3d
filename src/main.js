@@ -12,6 +12,7 @@ import { SpurTrain } from './mechanisms/spurTrain.js';
 import { Geneva } from './mechanisms/geneva.js';
 import { DoubleGeneva } from './mechanisms/doubleGeneva.js';
 import { InternalGear } from './mechanisms/internalGear.js';
+import { Planetary } from './mechanisms/planetary.js';
 
 const config = {
   mode: 'Spur train',
@@ -22,6 +23,7 @@ const config = {
   geneva: { slots: 4, centerDistance: 100 },
   double: { amplitude: 35, pushFrac: 0.62, size: 100 },
   internal: { module: 4, pinionTeeth: 12, ringTeeth: 48, pressureAngle: 20, thickness: 8 },
+  planetary: { module: 4, sunTeeth: 12, planetTeeth: 12, planets: 3, pressureAngle: 20, thickness: 8, fixed: 'ring' },
   export: { scale: 1.0 }, // uniform STL multiplier; model units are mm
 };
 
@@ -43,8 +45,10 @@ function build() {
     mechanism = new Geneva(config.geneva);
   } else if (config.mode === 'Double Geneva') {
     mechanism = new DoubleGeneva(config.double);
-  } else {
+  } else if (config.mode === 'Internal gear') {
     mechanism = new InternalGear(config.internal);
+  } else {
+    mechanism = new Planetary(config.planetary);
   }
   viewer.scene.add(mechanism.group);
   setWireframe(config.wireframe);

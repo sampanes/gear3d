@@ -12,6 +12,8 @@ import {
   spurTrainPhases,
   spurGearAngle,
   internalGearRatio,
+  planetaryAngles,
+  planetaryAssembly,
 } from '../src/kinematics.js';
 
 const near = (a, b, eps = 1e-9, msg = '') => assert.ok(Math.abs(a - b) <= eps, `${msg} ${a} !~= ${b}`);
@@ -215,4 +217,39 @@ test('internalGearRatio: ring turns slower by z_pinion/z_ring, same direction', 
   near(internalGearRatio(20, 60), 1 / 3);
   // same sign as the pinion (positive) -> same direction, and |ratio| < 1
   assert.ok(internalGearRatio(12, 48) > 0 && internalGearRatio(12, 48) < 1);
+});
+
+// ---------------------------------------------------------------------------
+// Planetary gearset
+// ---------------------------------------------------------------------------
+test('planetaryAngles satisfies the fundamental train equation for each fixed member', () => {
+  const zS = 12;
+  const zP = 12;
+  const zR = zS + 2 * zP;
+  const theta = 1.0;
+  for (const fixed of ['ring', 'carrier', 'sun']) {
+    const a = planetaryAngles(theta, zS, zP, fixed);
+    assert.equal(a.zRing, zR);
+    near(a[fixed], 0, 1e-12, `${fixed} member is held at 0`);
+    // (w_sun - w_carrier) / (w_ring - w_carrier) = -zRing / zSun
+    near((a.sun - a.carrier) / (a.ring - a.carrier), -zR / zS, 1e-9, `train eqn (${fixed})`);
+    // planet spin about its own axis: (wp - wc) / (ws - wc) = -zSun / zPlanet
+    near((a.planetSpin - a.carrier) / (a.sun - a.carrier), -zS / zP, 1e-9, `planet spin (${fixed})`);
+  }
+});
+
+test('planetaryAngles: ring-fixed reduction ratio is sun:carrier = (zS+zR):zS', () => {
+  const zS = 12;
+  const zP = 18;
+  const zR = zS + 2 * zP; // 48
+  const a = planetaryAngles(1, zS, zP, 'ring');
+  near(a.ring, 0);
+  near(a.sun, 1);
+  near(a.carrier, zS / (zS + zR)); // 12 / 60 = 0.2 -> 5:1 reduction
+});
+
+test('planetaryAssembly: integer exactly when planets are equally spaceable', () => {
+  assert.ok(Number.isInteger(planetaryAssembly(12, 36, 3))); // 48/3 = 16
+  assert.ok(Number.isInteger(planetaryAssembly(12, 36, 4))); // 48/4 = 12
+  assert.ok(!Number.isInteger(planetaryAssembly(12, 36, 5))); // 48/5
 });

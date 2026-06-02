@@ -75,6 +75,16 @@ circles touch. The ring's teeth point inward — addendum and dedendum swap, so
 the tip is the inner radius and the root opens out into the rim. Tune pinion and
 ring teeth, module, pressure angle, and thickness.
 
+### Planetary (epicyclic)
+A central **sun**, a set of **planets** on a rotating **carrier**, and a
+surrounding internal **ring** gear (`zRing = zSun + 2·zPlanet`). Choose which
+member is **fixed**: `ring` (classic reduction — sun in, carrier out), `carrier`
+(sun in, ring out, reversed), or `sun` (carrier in, ring out). The planets mesh
+with the sun and the ring at the same time; equal spacing requires
+`(zSun + zRing)` to be divisible by the planet count (the readout flags it if
+not). Tune sun and planet teeth, planet count, module, pressure angle, and
+thickness.
+
 ## Layout
 
 ```
@@ -93,4 +103,5 @@ src/
     geneva.js
     doubleGeneva.js
     internalGear.js
+    planetary.js
 ```

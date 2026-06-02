@@ -8,7 +8,7 @@ export function buildGUI(config, actions) {
   const gui = new GUI({ title: 'gear3d' });
 
   gui
-    .add(config, 'mode', ['Spur train', 'Geneva', 'Double Geneva', 'Internal gear'])
+    .add(config, 'mode', ['Spur train', 'Geneva', 'Double Geneva', 'Internal gear', 'Planetary'])
     .name('mechanism')
     .onChange(() => {
       refresh();
@@ -63,7 +63,17 @@ export function buildGUI(config, actions) {
   int.add(config.internal, 'pressureAngle', 14.5, 25, 0.5).name('pressure angle').onChange(actions.rebuild);
   int.add(config.internal, 'thickness', 2, 20, 0.5).onChange(actions.rebuild);
 
-  const folders = { 'Spur train': spur, Geneva: gen, 'Double Geneva': dbl, 'Internal gear': int };
+  // ----- Planetary -----
+  const pl = gui.addFolder('Planetary');
+  pl.add(config.planetary, 'sunTeeth', 8, 40, 1).name('sun teeth').onChange(actions.rebuild);
+  pl.add(config.planetary, 'planetTeeth', 8, 40, 1).name('planet teeth').onChange(actions.rebuild);
+  pl.add(config.planetary, 'planets', 3, 6, 1).name('# planets').onChange(actions.rebuild);
+  pl.add(config.planetary, 'fixed', ['ring', 'carrier', 'sun']).name('fixed member').onChange(actions.rebuild);
+  pl.add(config.planetary, 'module', 2, 12, 0.5).onChange(actions.rebuild);
+  pl.add(config.planetary, 'pressureAngle', 14.5, 25, 0.5).name('pressure angle').onChange(actions.rebuild);
+  pl.add(config.planetary, 'thickness', 2, 20, 0.5).onChange(actions.rebuild);
+
+  const folders = { 'Spur train': spur, Geneva: gen, 'Double Geneva': dbl, 'Internal gear': int, Planetary: pl };
 
   function refreshTeeth() {
     teethCtrls.forEach((c, i) => c.show(i < config.spur.gears));
