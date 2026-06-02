@@ -32,10 +32,14 @@ export function gearContour(params, stepsPerFlank = 14) {
   const halfTooth = Math.PI / (2 * z);
   const invAlpha = involute(alpha);
 
-  // The involute exists only for rho >= rb. Start flanks at the base circle and
-  // clamp the root just below it so the root fillet never crosses the flank.
-  const rStart = rb;
-  const rootR = Math.max(Math.min(rf, rb * 0.999), 0.2 * r);
+  // The involute exists only for rho >= rb, so the flank starts at the larger of
+  // the base circle and the root circle:
+  //   rf < rb  (low tooth counts): flanks start at rb; the [rf, rb] gap is
+  //            bridged by a short radial drop to the root land at rf.
+  //   rf >= rb (high tooth counts): flanks start right at the root circle, so
+  //            there is no drop and nothing is drawn below the true dedendum.
+  const rStart = Math.max(rb, rf);
+  const rootR = Math.max(Math.min(rf, rStart), 0.2 * r);
 
   const psi = (rho) => {
     const ar = Math.acos(Math.min(1, rb / rho));
@@ -68,17 +72,22 @@ export function gearContour(params, stepsPerFlank = 14) {
       const rho = rStart + (ra - rStart) * (k / stepsPerFlank);
       push(rho, c + psi(rho));
     }
-    // radial drop into the root, then root-fillet arc across the gap, then back
+    // radial drop into the root (only when the root sits below the flank base),
+    // then the root arc across the gap toward the next tooth.
     if (rootR < rStart) push(rootR, c + psiBase);
     const a0 = c + psiBase;
     const a1 = c + pitch - psiBase;
     const rootSteps = 5;
-    for (let k = 1; k <= rootSteps; k++) {
+    // When the root land is at the flank base (rf >= rb, no drop), the final arc
+    // vertex at a1 coincides with the next tooth's flank start, so stop one short
+    // of it; otherwise emit it as the base of the radial wall back up to the flank.
+    const lastRootK = rootR < rStart ? rootSteps : rootSteps - 1;
+    for (let k = 1; k <= lastRootK; k++) {
       push(rootR, a0 + (a1 - a0) * (k / rootSteps));
     }
-    // The radial climb back to the base circle at angle a1 is supplied by the
-    // next tooth's first trailing-flank vertex (and by the Shape auto-close on
-    // the last tooth), so emitting it here would just duplicate that vertex.
+    // The climb back to the flank base at a1 is supplied by the next tooth's
+    // first trailing-flank vertex (and by the Shape auto-close on the last
+    // tooth), so emitting it here would just duplicate that vertex.
   }
   return pts;
 }

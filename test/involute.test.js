@@ -38,13 +38,31 @@ test('gearContour has NO zero-length edges — regression for the duplicate-vert
   }
 });
 
-test('gearContour point count matches the post-fix layout (2*steps + 11 per tooth)', () => {
+test('gearContour point count matches the layout (radial drop only when rf < rb)', () => {
   for (const p of PARAMS) {
+    const { rb, rf, r } = gearMetrics(p);
+    const rStart = Math.max(rb, rf);
+    const rootR = Math.max(Math.min(rf, rStart), 0.2 * r);
+    const drop = rootR < rStart ? 1 : 0;
+    const rootSteps = 5;
+    const lastRootK = rootR < rStart ? rootSteps : rootSteps - 1;
     for (const sPF of [10, 14, 24]) {
       const pts = gearContour(p, sPF);
-      assert.equal(pts.length, p.teeth * (2 * sPF + 11), `${JSON.stringify(p)} steps=${sPF}`);
+      const perTooth = sPF + 1 + 4 + sPF + drop + lastRootK; // trailing + tip + leading + drop + root
+      assert.equal(pts.length, p.teeth * perTooth, `${JSON.stringify(p)} steps=${sPF}`);
     }
   }
+});
+
+test('high tooth count (rf >= rb): the profile is not drawn below the dedendum rf', () => {
+  const p = { module: 3, teeth: 60, pressureAngle: 25 };
+  const { rf, rb } = gearMetrics(p);
+  assert.ok(rf >= rb, `precondition rf(${rf}) >= rb(${rb})`);
+  const pts = gearContour(p, 14);
+  let minR = Infinity;
+  for (const q of pts) minR = Math.min(minR, Math.hypot(q.x, q.y));
+  assert.ok(minR >= rf - 1e-6, `min radius ${minR} dips below the dedendum ${rf}`);
+  near(minR, rf, 1e-6, 'root land should sit exactly at rf'); // regression for the accuracy fix
 });
 
 test('gearContour winds CCW (positive signed area) and stays within [root, tip]', () => {

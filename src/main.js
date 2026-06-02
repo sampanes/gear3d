@@ -17,7 +17,7 @@ const config = {
   speed: 0.3, // driver revolutions per second
   paused: false,
   wireframe: false,
-  spur: { gears: 3, t1: 12, t2: 24, t3: 18, t4: 15, t5: 30, module: 5, pressureAngle: 20, thickness: 8 },
+  spur: { gears: 3, t1: 12, t2: 24, t3: 18, t4: 15, t5: 30, module: 5, pressureAngle: 20, thickness: 8, helix: 0 },
   geneva: { slots: 4, centerDistance: 100 },
   double: { amplitude: 35, pushFrac: 0.62, size: 100 },
   export: { scale: 1.0 }, // uniform STL multiplier; model units are mm

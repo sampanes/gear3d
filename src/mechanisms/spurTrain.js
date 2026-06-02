@@ -27,7 +27,9 @@ export class SpurTrain {
       // through the teeth on a tiny pinion (only bites below the GUI ranges).
       const safeBore = Math.min(bore, m.rf * 0.6);
       const color = i === 0 ? PALETTE.driver : PALETTE.driven;
-      const gear = makeGear(gp, color, { thickness: p.thickness, bore: safeBore });
+      // Alternate the helix hand down the chain so adjacent gears mesh.
+      const helix = (i % 2 === 0 ? 1 : -1) * (p.helix || 0);
+      const gear = makeGear(gp, color, { thickness: p.thickness, bore: safeBore, helix });
       gear.position.set(x, 0, 0);
       this.group.add(gear);
       this.gears.push(gear);

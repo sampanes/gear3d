@@ -49,7 +49,10 @@ parts individually.
 A chain of involute spur gears. Each gear meshes with the previous one at the
 correct center distance `(z₁ + z₂)·module/2`; speeds telescope as
 `ωᵢ/ω₀ = (−1)ⁱ·z₀/zᵢ`, and the tooth phase is solved so teeth interlock.
-Tune gear count, teeth per gear, module, and pressure angle.
+Tune gear count, teeth per gear, module, pressure angle, thickness, and the
+**helix angle** — `0` is a straight spur gear; a non-zero angle twists the
+extrusion into helical gears, with neighbours taking opposite hands so they
+still mesh.
 
 ### Geneva drive
 A driver wheel with one crank pin indexes an *n*-slot star wheel, advancing it
