@@ -64,7 +64,9 @@ export function makeGear(params, color, opts = {}) {
   const mesh = new THREE.Mesh(gearGeometry(params, opts), metal(color, opts.material));
   mesh.castShadow = mesh.receiveShadow = true;
   pivot.add(mesh);
-  pivot.userData.metrics = gearMetrics(params);
+  const gm = gearMetrics(params);
+  pivot.userData.metrics = gm;
+  pivot.userData.pitch = { radius: gm.r, base: gm.rb, z: 0 }; // for educational overlays
   return pivot;
 }
 
@@ -99,7 +101,9 @@ export function makeRingGear(params, color, opts = {}) {
   const mesh = new THREE.Mesh(ringGearGeometry(params, opts), metal(color, opts.material));
   mesh.castShadow = mesh.receiveShadow = true;
   pivot.add(mesh);
-  pivot.userData.metrics = internalGearMetrics(params);
+  const gm = internalGearMetrics(params);
+  pivot.userData.metrics = gm;
+  pivot.userData.pitch = { radius: gm.r, base: gm.rb, z: 0 };
   return pivot;
 }
 
@@ -146,6 +150,10 @@ export function makeBevelGear(params, color, opts = {}) {
   const mesh = new THREE.Mesh(bevelGearGeometry(params, opts), metal(color, opts.material));
   mesh.castShadow = mesh.receiveShadow = true;
   pivot.add(mesh);
-  pivot.userData.metrics = gearMetrics(params);
+  const gm = gearMetrics(params);
+  const cone = opts.coneAngle ?? Math.PI / 4;
+  const zBack = (gm.r / Math.sin(cone)) * Math.cos(cone); // back-cone plane (apex at origin)
+  pivot.userData.metrics = gm;
+  pivot.userData.pitch = { radius: gm.r, base: gm.rb, z: zBack }; // back pitch circle
   return pivot;
 }

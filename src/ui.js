@@ -19,6 +19,7 @@ export function buildGUI(config, actions) {
   view.add(config, 'speed', -2, 2, 0.01).name('speed (rev/s)');
   view.add(config, 'paused').name('paused (space)').listen();
   view.add(config, 'wireframe').onChange((v) => setWireframe(v));
+  view.add(config, 'overlays').name('pitch/base circles').onChange(actions.toggleOverlays);
   view.add(actions, 'frame').name('frame view (F)');
   view.add(actions, 'resetView').name('reset camera');
 

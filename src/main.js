@@ -7,6 +7,7 @@ import { createViewer, frame } from './scene.js';
 import { buildGUI } from './ui.js';
 import { setWireframe } from './parts.js';
 import { saveSTL } from './export.js';
+import { showOverlays, clearOverlays } from './overlays.js';
 import { TAU, mod } from './math.js';
 import { SpurTrain } from './mechanisms/spurTrain.js';
 import { Geneva } from './mechanisms/geneva.js';
@@ -20,6 +21,7 @@ const config = {
   speed: 0.3, // driver revolutions per second
   paused: false,
   wireframe: false,
+  overlays: false, // pitch + base circles
   spur: { gears: 3, t1: 12, t2: 24, t3: 18, t4: 15, t5: 30, module: 5, pressureAngle: 20, thickness: 8, helix: 0 },
   geneva: { slots: 4, centerDistance: 100 },
   double: { amplitude: 35, pushFrac: 0.62, size: 100 },
@@ -56,6 +58,7 @@ function build() {
   }
   viewer.scene.add(mechanism.group);
   setWireframe(config.wireframe);
+  if (config.overlays) showOverlays(mechanism.group);
   frame(viewer.camera, viewer.controls, mechanism.group);
 }
 
@@ -68,6 +71,11 @@ const actions = {
     viewer.camera.position.copy(HOME);
     viewer.controls.target.set(0, 0, 0);
     viewer.controls.update();
+  },
+  toggleOverlays: () => {
+    if (!mechanism) return;
+    if (config.overlays) showOverlays(mechanism.group);
+    else clearOverlays(mechanism.group);
   },
   exportSTL: () => {
     if (!mechanism) return;
