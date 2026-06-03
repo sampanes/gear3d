@@ -6,10 +6,28 @@ import { TAU } from '../math.js';
 import { genevaGeometry, genevaStarAngle } from '../kinematics.js';
 import { PALETTE, metal, disc, pin, disposeObject } from '../parts.js';
 
+// Geometry of the real Geneva lock. Each inter-slot region of the star carries a
+// concave pocket: an arc of radius `pocketR` centred at P_i = c·(cosμ, sinμ), a
+// point distance c (the centre distance) out along the region's midline μ. When
+// that region rotates to face the driver, P_i lands exactly on the driver axis
+// O, so a cam disc of radius `camR` (a hair smaller) centred at O nests in the
+// pocket and blocks the star — and clears it only when the cam's wedge gap is
+// turned to the slot being indexed. `delta` is the pocket's angular half-width.
+export function lockGeometry(c, n, rim) {
+  const depth = c * 0.05; // how far the pocket dips inside the rim
+  const pocketR = c - rim + depth;
+  const cosD = (c * c + rim * rim - pocketR * pocketR) / (2 * c * rim);
+  const delta = Math.acos(Math.max(-1, Math.min(1, cosD)));
+  return { pocketR, delta, camR: pocketR - c * 0.02 };
+}
+
 // Slotted star-wheel outline (extruded, centred on Z). Slot 0 is centred at
-// angle PI so that, at rest, it faces the driver sitting along -x.
-function starGeometry(n, rim, bottom, w, bore, thk) {
+// angle PI so that, at rest, it faces the driver sitting along -x. Between slots
+// the rim carries a concave locking pocket (see lockGeometry).
+function starGeometry(n, rim, bottom, w, bore, thk, c) {
   const pitch = TAU / n;
+  const { pocketR, delta } = lockGeometry(c, n, rim);
+  const wrap = (x) => Math.atan2(Math.sin(x), Math.cos(x));
   const dphi = Math.asin(w / rim);
   const tMouth = Math.sqrt(rim * rim - w * w);
   const pts = [];
@@ -33,13 +51,23 @@ function starGeometry(n, rim, bottom, w, bore, thk) {
     pts.push(new THREE.Vector2(ux * bottom + vx * w, uy * bottom + vy * w));
     pts.push(new THREE.Vector2(ux * tMouth + vx * w, uy * tMouth + vy * w));
 
-    // rim arc across to the next slot
+    // rim -> concave locking pocket -> rim, across to the next slot
     const aExit = phi + dphi;
     const aNext = phi + pitch - dphi;
-    const rSteps = 12;
-    for (let k = 1; k <= rSteps; k++) {
-      pts.push(V(rim, aExit + (aNext - aExit) * (k / rSteps)));
+    const mu = phi + pitch / 2; // region midline
+    const aLo = mu - delta;
+    const aHi = mu + delta;
+    for (let k = 1; k <= 4; k++) pts.push(V(rim, aExit + (aLo - aExit) * (k / 4)));
+    const Px = c * Math.cos(mu);
+    const Py = c * Math.sin(mu);
+    const inward = mu + Math.PI; // from the pocket centre toward the star centre (concave side)
+    const b1 = inward + wrap(Math.atan2(rim * Math.sin(aLo) - Py, rim * Math.cos(aLo) - Px) - inward);
+    const b2 = inward + wrap(Math.atan2(rim * Math.sin(aHi) - Py, rim * Math.cos(aHi) - Px) - inward);
+    for (let k = 1; k <= 10; k++) {
+      const b = b1 + (b2 - b1) * (k / 10);
+      pts.push(new THREE.Vector2(Px + pocketR * Math.cos(b), Py + pocketR * Math.sin(b)));
     }
+    for (let k = 1; k <= 4; k++) pts.push(V(rim, aHi + (aNext - aHi) * (k / 4)));
   }
 
   const shape = new THREE.Shape(pts);
@@ -83,7 +111,7 @@ export class Geneva {
 
     // ---- driven star wheel (at center distance c along +x) ----
     this.star = new THREE.Object3D();
-    const starMesh = new THREE.Mesh(starGeometry(this.n, rim, bottom, w, bore, thk), metal(PALETTE.driven));
+    const starMesh = new THREE.Mesh(starGeometry(this.n, rim, bottom, w, bore, thk, c), metal(PALETTE.driven));
     starMesh.castShadow = starMesh.receiveShadow = true;
     this.star.add(starMesh);
     this.star.position.set(c, 0, 0);
@@ -97,13 +125,15 @@ export class Geneva {
     dDisc.position.z = driverZ;
     this.driver.add(dDisc);
 
-    // locking cam: a disc with a wedge removed, sitting just behind the star.
-    const rLock = bottom * 0.95;
+    // locking cam: a disc with a wedge gap, COPLANAR with the star and sized
+    // (camR) to ride in the star's concave locking pockets during dwell. The gap
+    // (width 2*gamma + margin, centred toward the star) clears the slot exactly
+    // during the index window, so the cam blocks the star except while indexing.
+    const { camR } = lockGeometry(c, this.n, rim);
     const camGap = 2 * g.gamma + 0.45;
-    const camGeo = new THREE.CylinderGeometry(rLock, rLock, thk * 0.7, 48, 1, false, camGap / 2, TAU - camGap);
+    const camGeo = new THREE.CylinderGeometry(camR, camR, thk * 0.9, 48, 1, false, camGap / 2, TAU - camGap);
     camGeo.rotateX(Math.PI / 2);
     const cam = new THREE.Mesh(camGeo, metal(PALETTE.lock, { rough: 0.6, metalness: 0.4 }));
-    cam.position.z = -thk * 0.6;
     cam.castShadow = true;
     this.driver.add(cam);
 

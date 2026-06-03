@@ -63,14 +63,20 @@ still mesh.
 A driver wheel with one crank pin indexes an *n*-slot star wheel, advancing it
 `360/n` per revolution and locking it in between. The slot/crank geometry uses
 the standard relations (`crank = c·sin(π/n)`, slot mouth `= c·cos(π/n)`) so the
-pin enters and leaves each slot tangentially — no shock.
+pin enters and leaves each slot tangentially — no shock. Between indexes a
+**locking disc** on the driver rides in a concave pocket on the star's rim —
+the disc's wedge gap opens to clear the slot only while indexing — so the star
+is held positively during dwell.
 
 ### Double Geneva (oscillator)
-Two coaxial wheels are joined and turn together, each carrying one pin 180° out
-of phase. A single lever pivoted above the central joint is driven to one
-extreme by the first wheel's pin, then half a revolution later back the other
-way by the second wheel's pin — so it **toggles back and forth in place**, with
-a short dwell at each end. Tune the swing, the push/dwell split, and the size.
+Two coaxial wheels **counter-rotate**, each carrying one crank pin. As a pin
+reaches the top of its orbit it enters a **radial slot** in the output rocker
+and, sliding within it, swings the rocker to one extreme; half a revolution
+later the other pin (on the counter-rotating wheel) sweeps it back — a genuine
+pin-in-slot drive that **toggles back and forth in place** with a dwell at each
+end. The engagement is a Geneva engagement (`a/H = sin(amp)`), so the rocker
+reaches its extremes with zero velocity and the dwell follows from the swing
+amplitude. Tune the swing and the size.
 
 ### Internal gear
 A pinion (driver) meshing **inside** a ring (internal) gear. Internal pairs turn

@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { DEG, TAU, mod } from '../src/math.js';
 import { SpurTrain } from '../src/mechanisms/spurTrain.js';
-import { Geneva } from '../src/mechanisms/geneva.js';
+import { Geneva, lockGeometry } from '../src/mechanisms/geneva.js';
 import { DoubleGeneva } from '../src/mechanisms/doubleGeneva.js';
 import { InternalGear } from '../src/mechanisms/internalGear.js';
 import { Planetary } from '../src/mechanisms/planetary.js';
@@ -19,6 +19,7 @@ import {
   spurTrainPhases,
   spurGearAngle,
   genevaStarAngle,
+  genevaGeometry,
   doubleGenevaRocker,
   internalGearRatio,
   planetaryAngles,
@@ -121,6 +122,24 @@ test('Geneva.update drives the star by genevaStarAngle() and mirrors engaged', (
     near(m.driver.rotation.z, theta, 1e-12, `driver @${theta}`);
     near(m.star.rotation.z, s.angle, 1e-12, `star @${theta}`);
     assert.equal(m.engaged, s.engaged, `engaged @${theta}`);
+  }
+});
+
+test('Geneva lock geometry: the cam nests inside the pocket and the pocket fits between the slots', () => {
+  const c = 100;
+  for (const n of [3, 4, 5, 6, 8, 12]) {
+    const g = genevaGeometry(n);
+    const rim = c * g.rimRatio;
+    const { pocketR, delta, camR } = lockGeometry(c, n, rim);
+    assert.ok(pocketR > 0, `n=${n}: pocketR > 0`);
+    assert.ok(camR > 0 && camR < pocketR, `n=${n}: cam nests with clearance (${camR} < ${pocketR})`);
+    const deepest = c - pocketR; // the pocket's innermost radius
+    assert.ok(deepest < rim, `n=${n}: pocket dips inside the rim`);
+    assert.ok(deepest > c * g.slotBottomRatio, `n=${n}: pocket stays above the slot bottom`);
+    // pocket half-width must fit within the inter-slot rim (leave a flank either side)
+    const dphi = Math.asin((Math.max(c * 0.035, 1.0) * 1.5) / rim);
+    const regionHalf = Math.PI / n - dphi;
+    assert.ok(delta > 0 && delta < regionHalf, `n=${n}: pocket fits between slots (${delta} < ${regionHalf})`);
   }
 });
 
