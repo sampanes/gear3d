@@ -14,6 +14,7 @@ import { DoubleGeneva } from '../src/mechanisms/doubleGeneva.js';
 import { InternalGear } from '../src/mechanisms/internalGear.js';
 import { Planetary } from '../src/mechanisms/planetary.js';
 import { BevelPair } from '../src/mechanisms/bevelGears.js';
+import { SatorSquare } from '../src/mechanisms/satorSquare.js';
 import {
   spurTrainPhases,
   spurGearAngle,
@@ -36,6 +37,7 @@ const CONFIG = {
   internal: { module: 4, pinionTeeth: 12, ringTeeth: 48, pressureAngle: 20, thickness: 8 },
   planetary: { module: 4, sunTeeth: 12, planetTeeth: 12, planets: 3, pressureAngle: 20, thickness: 8, fixed: 'ring' },
   bevel: { module: 4, pinionTeeth: 16, gearTeeth: 24, pressureAngle: 20, faceWidth: 14 },
+  sator: { cell: 40, thickness: 6, spinN: 4, pushFrac: 0.62 },
 };
 
 const builders = [
@@ -45,6 +47,7 @@ const builders = [
   ['InternalGear', () => new InternalGear(CONFIG.internal)],
   ['Planetary', () => new Planetary(CONFIG.planetary)],
   ['BevelPair', () => new BevelPair(CONFIG.bevel)],
+  ['SatorSquare', () => new SatorSquare(CONFIG.sator)],
 ];
 
 // A spread of driver angles incl. zero, negative, and multi-revolution.
@@ -232,4 +235,45 @@ test('InternalGear clamps ringTeeth up to the pinion+4 validity floor', () => {
     near(m.ring.rotation.z, ratio * theta + m.ringPhase, 1e-12, `ring @${theta}`);
   }
   m.dispose();
+});
+
+// ---------------------------------------------------------------------------
+// SATOR square — the 7th mode, wired additively via the MODES registry
+// ---------------------------------------------------------------------------
+test('SatorSquare: 25 tiles with the default behavior palette (4 O-flips, 1 spin, fixed N)', () => {
+  const m = new SatorSquare(CONFIG.sator);
+  assert.equal(m.tiles.length, 25, '5×5 grid');
+  assert.equal(m.counts.flip, 4, 'the four O tiles flip');
+  assert.equal(m.counts.fixed, 1, 'the centre N is the fixed hub');
+  assert.equal(m.counts.spin, 1, 'one diversity spin tile');
+  assert.equal(m.counts.upright + m.counts.flip + m.counts.spin + m.counts.fixed, 25, 'every cell assigned');
+});
+
+test('SatorSquare: every tile reads legibly at each 90° detent (upright, or 0/π for the O flips)', () => {
+  const m = new SatorSquare(CONFIG.sator);
+  for (let k = 0; k < 4; k++) {
+    const phi = (k * Math.PI) / 2;
+    m.update(phi);
+    for (const t of m.tiles) {
+      const world = mod(m.decor.rotation.z + t.letterPivot.rotation.z, TAU); // absolute orientation
+      if (t.behavior === 'flip') {
+        assert.ok(Math.min(world, Math.abs(world - Math.PI), TAU - world) < 1e-6, `${t.letter} flip legible @${k}·90°`);
+      } else {
+        assert.ok(Math.min(world, TAU - world) < 1e-6, `${t.letter} (${t.behavior}) upright @${k}·90° (world ${world})`);
+      }
+    }
+  }
+});
+
+test('SatorSquare: letters live only in decor, not in the printable (STL) sub-group', () => {
+  const m = new SatorSquare(CONFIG.sator);
+  const countLetters = (root) => {
+    let n = 0;
+    root.traverse((o) => {
+      if (o.userData && o.userData.isLetter) n += 1;
+    });
+    return n;
+  };
+  assert.equal(countLetters(m.printable), 0, 'no letters in the printable sub-group');
+  assert.equal(countLetters(m.decor), 25, 'all 25 letters in the decor sub-group');
 });

@@ -4,6 +4,8 @@ A 3D gear generator in the browser — like [geargenerator.com](https://geargene
 but in 3D with CAD-style **middle-mouse orbit**. Build involute **spur / helical gear
 trains**, external **Geneva drives**, **double-Geneva oscillators**, **internal
 (ring) gears**, **planetary (epicyclic) gearsets**, and **bevel gear pairs**.
+It also includes a kinematic **SATOR-square** mode — a 5×5 turning-letter wall
+piece that reads upright again every 90°, built from those same primitives.
 
 Built with [Three.js](https://threejs.org/) + [Vite](https://vitejs.dev/) +
 [lil-gui](https://lil-gui.georgealways.com/).
@@ -96,6 +98,17 @@ own axes at `ω_B/ω_A = z_A/z_B`. The teeth use a Tredgold (back-cone)
 approximation — the spur profile extruded and tapered toward the shared apex —
 which prints and teaches well without true spherical-involute geometry. Tune
 pinion and gear teeth, module, pressure angle, and face width.
+
+### SATOR square
+A 5×5 board carrying the Latin SATOR word square, turned on the wall. The whole
+board rotates, and each tile counter-rotates relative to it so the square reads
+upright again at every 90° — most letters simply stay upright (a 1:1 idler), the
+four **O** tiles flip upright↔inverted (a double-Geneva with `{0, π}` dwells),
+the centre **N** is the fixed hub, and one tile spins (a fixed-sun planetary, 4
+turns per board turn) for variety. The per-tile motion is the closed-form
+`kinematics.satorTileAngle`; STL export uses `mechanism.printable`, so the block
+letters (decor) are excluded and printed separately. Tune the cell size and
+board thickness.
 
 ## Layout
 

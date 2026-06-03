@@ -13,7 +13,7 @@ much as the live 3D demo.
 | 4 | Mechanisms | ✅ done | Spur + **helical** ✅, Geneva ✅, Double-Geneva ✅, **Internal / ring** ✅, **Planetary / epicyclic** ✅, **Bevel pair** ✅. All six are unit-tested at the kinematics layer; per-mechanism `update()` integration (mesh rotations vs. kinematics) is not yet covered. |
 | 5 | Educational overlays | ✅ done | Pitch (solid) + base (dashed) **circles** via the *pitch/base circles* toggle (`src/overlays.js`); lines are excluded from STL. *(Numeric labels — ratio / center distance / tooth count — were in the original scope but are not implemented; circles only.)* |
 | 6 | Visual upgrade | ✅ done | Procedural studio reflections (`RoomEnvironment` via `PMREMGenerator` — no external HDR asset), shadow-only back wall (`ShadowMaterial`), ACES filmic tone-mapping, richer metals (`src/scene.js`). |
-| 7 | SATOR square mode | 📐 planned | A 5×5 turning-letter wall piece as an additional mode — design in [sator-square.md](sator-square.md). |
+| 7 | SATOR square mode | 🟡 in progress | A 5×5 turning-letter wall piece (`src/mechanisms/satorSquare.js`), registered as the **SATOR square** mode. P0 kinematics + P1–P4 (board, block letters, per-tile motion, printable/decor STL split) done & unit-tested; **TODO:** P5 per-cell behavior editor + presets. Design in [sator-square.md](sator-square.md). |
 
 ## Out of scope
 

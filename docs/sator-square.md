@@ -1,7 +1,9 @@
 # SATOR square — mechanism design
 
-> Status: **design / plan** (no implementation yet). This document describes how
-> to build a *SATOR square* variant on top of the existing gear3d primitives.
+> Status: **in progress.** P0 kinematics (`satorTileAngle` & friends) and the
+> P1–P4 mechanism (`src/mechanisms/satorSquare.js`, registered as the *SATOR
+> square* mode) are implemented and unit-tested; the per-cell behavior editor +
+> presets (P5) remain. This document is the design it was built from.
 
 A wall-mounted **5×5 letter board** carrying the Latin SATOR word square. You
 turn the whole board on the wall; **every 90° of board rotation the square reads
@@ -134,12 +136,12 @@ The planetary/ring primitives already exist, so the genuinely new pieces are:
 
 ## Suggested phases
 
-- **P0** kinematics + tests (double-Geneva `{0,π}`, behavior dispatcher, detents).
-- **P1** static board + 25 block letters render in correct positions.
-- **P2** motion: always-upright + spin tiles, verified upright at each 90°.
-- **P3** the four O tiles flipping via the generalized double-Geneva.
-- **P4** illustrative printable gear network + letters-excluded STL split.
-- **P5** UI behavior editor, presets, optional educational overlays.
+- **P0 ✅** kinematics + tests (double-Geneva `{0,π}`, behavior dispatcher, detents).
+- **P1 ✅** static board + 25 block letters render in correct positions.
+- **P2 ✅** motion: always-upright + spin tiles, verified upright at each 90°.
+- **P3 ✅** the four O tiles flipping via the generalized double-Geneva.
+- **P4 ✅** printable/decor split — STL export passes `mechanism.printable` (letters excluded).
+- **P5 ⬜** UI behavior editor, presets, optional educational overlays.
 
 ## How it ships
 

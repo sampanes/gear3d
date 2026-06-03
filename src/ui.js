@@ -82,7 +82,20 @@ export function buildGUI(config, actions, modeNames) {
   bev.add(config.bevel, 'pressureAngle', 14.5, 25, 0.5).name('pressure angle').onChange(actions.rebuild);
   bev.add(config.bevel, 'faceWidth', 4, 30, 1).name('face width').onChange(actions.rebuild);
 
-  const folders = { 'Spur train': spur, Geneva: gen, 'Double Geneva': dbl, 'Internal gear': int, Planetary: pl, Bevel: bev };
+  // ----- SATOR square -----
+  const sat = gui.addFolder('SATOR square');
+  sat.add(config.sator, 'cell', 24, 60, 1).name('cell size').onChange(actions.rebuild);
+  sat.add(config.sator, 'thickness', 2, 12, 0.5).onChange(actions.rebuild);
+
+  const folders = {
+    'Spur train': spur,
+    Geneva: gen,
+    'Double Geneva': dbl,
+    'Internal gear': int,
+    Planetary: pl,
+    Bevel: bev,
+    'SATOR square': sat,
+  };
 
   function refreshTeeth() {
     teethCtrls.forEach((c, i) => c.show(i < config.spur.gears));
