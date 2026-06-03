@@ -35,11 +35,33 @@ const config = {
 
 const canvas = document.getElementById('app');
 const readout = document.getElementById('readout');
-const viewer = createViewer(canvas);
+
+// Headless-screenshot hook: ?mode=...&angle=<deg>&drives=0|1 sets a deterministic
+// frozen state for off-screen capture; with no params the app runs normally.
+const params = new URLSearchParams(location.search);
+if (params.has('mode')) config.mode = params.get('mode');
+if (params.has('drives') && config.sator) config.sator.drives = params.get('drives') !== '0';
+const frozen = params.has('mode') || params.has('angle');
+
+const viewer = createViewer(canvas, { preserveDrawingBuffer: frozen });
 const HOME = viewer.camera.position.clone();
+
+// ?az=<deg>&el=<deg> orbits the capture camera (azimuth around Y, elevation) so
+// headless shots can see depth / behind the board; frame() keeps the direction.
+if (params.has('az') || params.has('el')) {
+  const az = ((parseFloat(params.get('az')) || 0) * Math.PI) / 180;
+  const el = ((parseFloat(params.get('el')) || 0) * Math.PI) / 180;
+  const r = viewer.camera.position.length();
+  viewer.camera.position.set(r * Math.cos(el) * Math.sin(az), r * Math.sin(el), r * Math.cos(el) * Math.cos(az));
+  viewer.camera.lookAt(0, 0, 0);
+}
 
 let mechanism = null;
 let driverAngle = 0;
+if (params.has('angle')) {
+  driverAngle = ((parseFloat(params.get('angle')) || 0) * Math.PI) / 180;
+  config.paused = true; // hold the chosen driver angle for a deterministic shot
+}
 
 // One registry mapping each mode name to its mechanism factory — the single
 // source of truth for both the build dispatch below and the GUI's mode list, so

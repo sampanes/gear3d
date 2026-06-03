@@ -5,11 +5,13 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 
-export function createViewer(canvas) {
+export function createViewer(canvas, opts = {}) {
   const renderer = new THREE.WebGLRenderer({
     canvas,
     antialias: true,
     powerPreference: 'high-performance',
+    // off-screen headless screenshots need the drawing buffer kept around
+    preserveDrawingBuffer: !!opts.preserveDrawingBuffer,
   });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setClearColor(0x0d1018, 1);

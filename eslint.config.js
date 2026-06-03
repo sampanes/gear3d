@@ -12,8 +12,8 @@ export default [
     languageOptions: { ecmaVersion: 2022, sourceType: 'module', globals: { ...globals.browser } },
   },
   {
-    // node-run tests and build/config files
-    files: ['test/**/*.js', '**/*.config.js'],
+    // node-run tests, tooling, and build/config files
+    files: ['test/**/*.js', 'tools/**/*.{js,mjs}', '**/*.config.js'],
     languageOptions: { ecmaVersion: 2022, sourceType: 'module', globals: { ...globals.node } },
   },
 ];
