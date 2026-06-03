@@ -313,6 +313,21 @@ export function indexUpright(n) {
   return mod(n, 4) === 0;
 }
 
+// SATOR O-flip drive (geared double-Geneva). The O is NOT anti-rotated — it rides
+// the board — so its only correction is a small rock. A double-Geneva "star" rocks
+// ±22.5° (a 45° swing), dwelling at each detent (theta = 2·Φ lands the dwells on
+// the 90° detents); a 2:1 step-up gear turns that into a 0..90° rock of the tile
+// relative to the board. Combined with the board's own 90°/detent, the O reads as
+// a 180° flip-and-hold — upright or inverted, both legible for a symmetric O.
+export function satorFlipStar(phi) {
+  return doubleGenevaRocker(2 * phi, Math.PI / 8).angle; // the driven star, ±22.5°
+}
+export function satorFlipRock(phi) {
+  // tile = 2:1 gear up from the star (opposite sign), offset to rock 0..90°:
+  //   star dwells at +22.5° at the even detents -> tile 0°;  -22.5° at the odd -> tile 90°
+  return Math.PI / 4 - 2 * satorFlipStar(phi);
+}
+
 // Per-cell behavior dispatcher: maps a tile behavior to its psi(Phi) — the
 // rotation relative to the board, for rendering. The gear network (planetary /
 // idler-ring / double-Geneva) is the printable realization of these forms.
@@ -321,11 +336,10 @@ export function indexUpright(n) {
 //   'spin'    N full turns per board turn (params.n, mult of 4)    -> psi = (N-1)Phi
 //   'index'   spin in discrete clicks: params.clicks per tile-turn, params.n
 //             turns per board turn (reads upright at the detents iff n mult of 4)
-//   'flip'    O tiles: upright <-> inverted via double-Geneva. params.freq sets
-//             flips per board turn and must be a POSITIVE EVEN integer (default
-//             2) so the dwells land on the 90deg detents; an odd freq would
-//             leave the O mid-flip at the 90/270deg detents and is rejected.
-//             params.pushFrac tunes the push/dwell split.
+//   'flip'    O tiles: NOT anti-rotated — the O rides the board and a 2:1-geared
+//             double-Geneva rocks it 0..90deg (board frame), which with the
+//             board's own 90deg/detent reads as a 180deg flip-and-hold (upright
+//             or inverted, both legible for a symmetric O). See satorFlipRock.
 export function satorTileAngle(behavior, phi, params = {}) {
   switch (behavior) {
     case 'fixed':
@@ -335,13 +349,8 @@ export function satorTileAngle(behavior, phi, params = {}) {
       return spinAngle(phi, params.n ?? 4);
     case 'index': // single-Geneva stepped spin; psi = absolute - board angle
       return indexAbsolute(phi, params.n ?? 4, params.clicks ?? 4, params.pushFrac ?? 0.5) - phi;
-    case 'flip': {
-      const freq = params.freq ?? 2;
-      if (!Number.isInteger(freq) || freq <= 0 || freq % 2 !== 0) {
-        throw new Error(`SATOR flip freq must be a positive even integer (got ${freq}); only even freq keeps the O legible at every 90° detent`);
-      }
-      return alwaysUprightAngle(phi) + flipAngle(freq * phi, params.pushFrac ?? 0.62);
-    }
+    case 'flip': // O rides the board; the geared double-Geneva rocks it 0..90° (board frame)
+      return satorFlipRock(phi);
     default:
       throw new Error(`unknown SATOR tile behavior: ${behavior}`);
   }

@@ -25,7 +25,7 @@ import {
   planetaryAngles,
   bevelConeAngles,
   toothPhaseAt,
-  flipAngle,
+  satorFlipStar,
 } from '../src/kinematics.js';
 
 const near = (a, b, eps = 1e-12, msg = '') => assert.ok(Math.abs(a - b) <= eps, `${msg} ${a} !~= ${b}`);
@@ -351,17 +351,17 @@ test('SatorSquare: index (single-Geneva click) tiles report emergent legibility 
   }
 });
 
-test('SatorSquare: a shared double-Geneva drive is rendered per flip diagonal O-pair', () => {
-  const m = new SatorSquare(CONFIG.sator); // default palette: all four O's flip
-  assert.equal(m.drives.length, 2, 'two flip diagonal pairs → two shared drives');
-  // the drive rocker tracks the {0,π} flip toggle (in sync with the tiles)
+test('SatorSquare: a geared shared drive is rendered per flip corner O-pair', () => {
+  const m = new SatorSquare(CONFIG.sator); // default palette: all four O's flip → two corner pairs
+  assert.equal(m.drives.length, 2, 'two corner O-pairs → two geared drives');
+  // the star gear rocks per satorFlipStar (±22.5°), driving both O's via the 2:1 gear
   for (const phi of [0, 0.8, Math.PI, 4.2]) {
     m.update(phi);
-    near(m.drives[0].rocker.rotation.z, flipAngle(2 * phi, m.pushFrac), 1e-12, `drive rocker @${phi}`);
+    near(m.drives[0].starGear.rotation.z, satorFlipStar(phi), 1e-12, `star gear rocks @${phi}`);
   }
   // a pair with a non-flip O gets no shared drive
   const cells = defaultCells();
-  cells[cellKey(0, 3)] = 'upright';
+  cells[cellKey(0, 3)] = 'upright'; // (0,3) is in the top-right corner pair
   assert.equal(new SatorSquare({ ...CONFIG.sator, cells }).drives.length, 1, 'broken pair → one drive');
   // the toggle turns drives off entirely
   assert.equal(new SatorSquare({ ...CONFIG.sator, drives: false }).drives.length, 0, 'drives:false → none');

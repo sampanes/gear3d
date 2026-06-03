@@ -10,7 +10,8 @@
 // export serialises) and `decor` (the block-letter glyphs, printed separately).
 
 import * as THREE from 'three';
-import { satorTileAngle, indexUpright, flipAngle } from '../kinematics.js';
+import { satorTileAngle, indexUpright, satorFlipStar } from '../kinematics.js';
+import { makeGear } from '../gears/gear.js';
 import { PALETTE, metal, disc, pin, disposeObject } from '../parts.js';
 
 export const SATOR_WORD = ['SATOR', 'AREPO', 'TENET', 'OPERA', 'ROTAS'];
@@ -125,44 +126,47 @@ function letterGroup(ch, size, depth, z) {
 // exactly in sync with the tiles); the shaft stands in for the cross-board
 // transmission rather than a full gear train. `gi` offsets each pair's drive to
 // its own z-plane behind the board so two diagonals don't collide.
-function buildFlipDrive(p1, cell, thickness, gi) {
+// One shared geared double-Geneva drive for a corner O-pair. A driven "star" gear
+// at the pair's midpoint meshes a small gear on each O tile (2:1 step-up), so the
+// star rocking ±22.5° turns each O 0..90° — both in sync. The two driver wheels
+// are illustrative (the standalone Double Geneva mode is the faithful star).
+function buildGearedDrive(p1, p2, oPivots, cell, thickness, gi) {
   const g = new THREE.Group();
-  const len = p1.length();
-  const ang = Math.atan2(p1.y, p1.x);
-  const z = -thickness * (1.4 + gi * 0.7);
+  const mid = p1.clone().add(p2).multiplyScalar(0.5);
+  const d = Math.max(p1.distanceTo(mid), 1);
+  const Zo = 12;
+  const Zs = 24; // 2:1 step-up (star gear : O gear)
+  const m = (2 * d) / (Zs + Zo); // module so the pitch circles meet at distance d
+  const pa = 20;
+  const t = thickness * 0.55;
+  const z = -thickness * (1.3 + gi * 0.5); // behind the board plate, each pair its own plane
 
-  // shaft along the diagonal, reaching from one tile through the centre to the other
-  const shaft = new THREE.Mesh(
-    new THREE.CylinderGeometry(cell * 0.05, cell * 0.05, 2 * len, 16),
-    metal(PALETTE.shaft, { metalness: 0.85, rough: 0.3 })
-  );
-  shaft.rotation.z = ang - Math.PI / 2; // cylinder axis (+Y) -> the diagonal
-  shaft.position.z = z;
-  shaft.castShadow = true;
-  g.add(shaft);
+  // a gear on each O tile pivot — rocks 0..90° with the tile (psi = satorFlipRock)
+  for (const piv of oPivots) {
+    const og = makeGear({ module: m, teeth: Zo, pressureAngle: pa }, PALETTE.driven, { thickness: t });
+    og.position.z = z;
+    piv.add(og);
+  }
+  // the driven star gear at the midpoint, meshing both O gears
+  const starGear = makeGear({ module: m, teeth: Zs, pressureAngle: pa }, PALETTE.driver, { thickness: t });
+  starGear.position.set(mid.x, mid.y, z);
+  g.add(starGear);
 
-  // two counter-rotating wheels at the centre, each with a crank pin
-  const rW = cell * 0.3;
-  const wThk = cell * 0.1;
-  const front = new THREE.Object3D();
-  const fd = disc(rW, wThk, PALETTE.driver);
-  fd.position.z = z + wThk;
-  front.add(fd, pin(rW * 0.7, 0, cell * 0.05, wThk * 1.6, z + wThk * 0.4));
-  const back = new THREE.Object3D();
-  const bd = disc(rW, wThk, PALETTE.driven);
-  bd.position.z = z - wThk;
-  back.add(bd, pin(rW * 0.7, 0, cell * 0.05, wThk * 1.6, z - wThk * 2));
-  g.add(front, back);
-
-  // a rocker lever just above the wheels, rocking with the flip toggle
-  const rocker = new THREE.Object3D();
-  rocker.position.set(0, rW * 1.5, z);
-  const bar = new THREE.Mesh(new THREE.BoxGeometry(cell * 0.12, rW * 1.3, thickness * 0.4), metal(PALETTE.output));
-  bar.position.y = -rW * 0.65;
-  rocker.add(bar);
-  g.add(rocker);
-
-  return { group: g, front, back, rocker };
+  // two driver wheels (one pin each) flanking the star, perpendicular to the O-O line
+  const u = p2.clone().sub(p1).normalize();
+  const perp = new THREE.Vector2(-u.y, u.x);
+  const Rs = (m * Zs) / 2;
+  const rd = Rs * 0.55;
+  const off = Rs + rd + m;
+  const drivers = [];
+  for (const s of [1, -1]) {
+    const dw = new THREE.Object3D();
+    dw.position.set(mid.x + perp.x * off * s, mid.y + perp.y * off * s, z);
+    dw.add(disc(rd, t, s > 0 ? PALETTE.driver : PALETTE.driven), pin(rd * 0.6, 0, cell * 0.04, t * 1.5, -t * 0.75));
+    g.add(dw);
+    drivers.push(dw);
+  }
+  return { group: g, starGear, drivers };
 }
 
 export class SatorSquare {
@@ -238,17 +242,17 @@ export class SatorSquare {
     // diagonal are point-symmetric through the centre, so one shaft drives both)
     this.drives = [];
     if (p.drives !== false) {
-      const behaviorAt = (r, c) => {
-        const t = this.tiles.find((x) => x.row === r && x.col === c);
-        return t ? t.behavior : null;
-      };
-      const DIAGONALS = [[[0, 3], [4, 1]], [[1, 4], [3, 0]]];
-      DIAGONALS.forEach(([[r1, c1], [r2, c2]], gi) => {
-        if (behaviorAt(r1, c1) !== 'flip' || behaviorAt(r2, c2) !== 'flip') return;
+      const tileAt = (r, c) => this.tiles.find((t) => t.row === r && t.col === c);
+      const CLUSTERS = [[[0, 3], [1, 4]], [[3, 0], [4, 1]]]; // the two corner O-pairs
+      CLUSTERS.forEach(([[r1, c1], [r2, c2]], gi) => {
+        const a = tileAt(r1, c1);
+        const b = tileAt(r2, c2);
+        if (!a || !b || a.behavior !== 'flip' || b.behavior !== 'flip') return;
         const p1 = new THREE.Vector2((c1 - 2) * cell, (2 - r1) * cell);
-        const d = buildFlipDrive(p1, cell, thickness, gi);
-        this.printable.add(d.group);
-        this.drives.push(d);
+        const p2 = new THREE.Vector2((c2 - 2) * cell, (2 - r2) * cell);
+        const drive = buildGearedDrive(p1, p2, [a.gearPivot, b.gearPivot], cell, thickness, gi);
+        this.printable.add(drive.group);
+        this.drives.push(drive);
       });
     }
   }
@@ -262,11 +266,11 @@ export class SatorSquare {
       t.letterPivot.rotation.z = psi;
     }
     if (this.drives.length) {
-      const flipVal = flipAngle(2 * phi, this.pushFrac); // the {0,π} toggle the drive produces
+      const star = satorFlipStar(phi); // the star gear rocks ±22.5°, dwelling at the detents
       for (const d of this.drives) {
-        d.front.rotation.z = phi * 3; // counter-rotating wheels (illustrative)
-        d.back.rotation.z = -phi * 3;
-        d.rocker.rotation.z = flipVal; // rocker swings with the flip, in sync with both tiles
+        d.starGear.rotation.z = star;
+        d.drivers[0].rotation.z = phi * 4; // illustrative counter-rotating drivers
+        d.drivers[1].rotation.z = -phi * 4;
       }
     }
   }

@@ -23,6 +23,8 @@ import {
   atQuarterDetent,
   indexAbsolute,
   indexUpright,
+  satorFlipStar,
+  satorFlipRock,
   satorTileAngle,
 } from '../src/kinematics.js';
 
@@ -434,10 +436,20 @@ test('indexAbsolute: discrete clicks — a staircase that dwells between equal s
   near(at(0.7), at(0.95), 1e-12, 'value is flat (dwell) between clicks');
 });
 
-test('satorTileAngle: flip freq must be a positive even integer (odd freq breaks detent legibility)', () => {
-  assert.doesNotThrow(() => satorTileAngle('flip', 0, { freq: 2 }));
-  assert.doesNotThrow(() => satorTileAngle('flip', 0, { freq: 4 }));
-  assert.throws(() => satorTileAngle('flip', 0, { freq: 3 }), /positive even integer/);
-  assert.throws(() => satorTileAngle('flip', 0, { freq: 0 }), /positive even integer/);
-  assert.throws(() => satorTileAngle('flip', 0, { freq: 2.5 }), /positive even integer/);
+test('satorFlipRock: O rides the board and rocks 0..90° (board frame), legible at every detent', () => {
+  // tile dwells at 0° at the even detents, 90° at the odd detents
+  near(satorFlipRock(0), 0, 1e-9, 'Φ=0 → 0°');
+  near(satorFlipRock(Math.PI / 2), Math.PI / 2, 1e-9, 'Φ=90° → 90°');
+  near(satorFlipRock(Math.PI), 0, 1e-9, 'Φ=180° → 0°');
+  near(satorFlipRock((3 * Math.PI) / 2), Math.PI / 2, 1e-9, 'Φ=270° → 90°');
+  // world orientation (board + rock) reads as O (≡0 or π) at every detent
+  for (let k = 0; k < 4; k++) {
+    const phi = (k * Math.PI) / 2;
+    const world = mod(phi + satorFlipRock(phi), TAU);
+    assert.ok(Math.min(world, Math.abs(world - Math.PI), TAU - world) < 1e-6, `flip legible at detent ${k}`);
+  }
+  // 2:1 gear: the star rocks half the tile's range (±22.5° vs the tile's 0..90°)
+  near(satorFlipStar(0), Math.PI / 8, 1e-9, 'star +22.5° at even detent');
+  near(satorFlipStar(Math.PI / 2), -Math.PI / 8, 1e-9, 'star −22.5° at odd detent');
+  near(satorFlipRock(0), Math.PI / 4 - 2 * satorFlipStar(0), 1e-12, 'tile = 2:1 up from star');
 });

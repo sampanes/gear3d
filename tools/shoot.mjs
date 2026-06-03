@@ -26,18 +26,13 @@ const TYPES = {
 // states to capture: [filename, query string]
 const SHOTS = [
   ['spur', 'mode=Spur%20train&angle=120'],
-  ['geneva', 'mode=Geneva&angle=20'],
-  ['double-geneva', 'mode=Double%20Geneva&angle=55'],
+  ['geneva', 'mode=Geneva&angle=12&az=30&el=28'],
+  ['double-geneva', 'mode=Double%20Geneva&angle=55&az=42&el=24'],
   ['internal', 'mode=Internal%20gear&angle=90'],
   ['planetary', 'mode=Planetary&angle=90'],
   ['bevel', 'mode=Bevel&angle=45'],
-  ['sator-0deg', 'mode=SATOR%20square&angle=0'],
-  ['sator-45deg', 'mode=SATOR%20square&angle=45'],
-  ['sator-drives-off', 'mode=SATOR%20square&angle=0&drives=0'],
-  // angled views to inspect depth: double-Geneva slot, and the drives behind the board
-  ['double-geneva-iso', 'mode=Double%20Geneva&angle=55&az=42&el=24'],
-  ['geneva-iso', 'mode=Geneva&angle=12&az=30&el=28'],
-  ['sator-back-iso', 'mode=SATOR%20square&angle=20&az=158&el=26'],
+  ['sator-front', 'mode=SATOR%20square&angle=0'], // board reads SATOR
+  ['sator-drive', 'mode=SATOR%20square&angle=20&az=125&el=34'], // geared O-drives behind
 ];
 
 const server = createServer(async (req, res) => {
