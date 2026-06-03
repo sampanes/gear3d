@@ -141,13 +141,17 @@ The planetary/ring primitives already exist, so the genuinely new pieces are:
 - **P4** illustrative printable gear network + letters-excluded STL split.
 - **P5** UI behavior editor, presets, optional educational overlays.
 
-## Coordination notes
+## How it ships
 
-- The repo is **local-only — commit, never push**.
-- It is currently developed **directly on `master` in a single working
-  directory** (no separate `main` branch, no PR/branch convention). Build SATOR
-  on an isolated branch only if it won't be edited concurrently with other work
-  in the same directory; otherwise commit to `master`.
-- The **Spin** behavior depends on the planetary primitive (`planetaryAngles`,
-  `Planetary`, `makeRingGear`) — already committed — so coordinate to build *on
-  top of* that rather than duplicating it.
+- SATOR is planned as **one more entry in the existing mode switcher**
+  (Spur / Geneva / Double Geneva / Internal / Planetary → + SATOR), **not a
+  branch**. It is purely additive — a self-contained `mechanisms/satorSquare.js`
+  plus tiny wiring in `main.js` / `ui.js` and a fenced section in `kinematics.js`
+  — so free-form gear building stays exactly as it is and there is no fork to
+  cherry-pick between.
+- The one shared change — generalizing `doubleGenevaOutput`'s dwell targets from
+  `{−amp, +amp}` to `{0, π}` for the O flip — is **backward-compatible** and also
+  makes the existing Double Geneva mode more capable.
+- The **Spin** behavior reuses the committed planetary primitive
+  (`planetaryAngles`, `Planetary`, `makeRingGear`) rather than duplicating it.
+- The repo is **local-only — commit, never push.**

@@ -1,8 +1,9 @@
 # gear3d
 
 A 3D gear generator in the browser — like [geargenerator.com](https://geargenerator.com/),
-but in 3D with CAD-style **middle-mouse orbit**. Build involute **spur gear
-trains**, external **Geneva drives**, and **double-Geneva oscillators**.
+but in 3D with CAD-style **middle-mouse orbit**. Build involute **spur / helical gear
+trains**, external **Geneva drives**, **double-Geneva oscillators**, **internal
+(ring) gears**, and **planetary (epicyclic) gearsets**.
 
 Built with [Three.js](https://threejs.org/) + [Vite](https://vitejs.dev/) +
 [lil-gui](https://lil-gui.georgealways.com/).
@@ -92,7 +93,7 @@ src/
   main.js              loop, mode switching, GUI wiring
   scene.js             renderer, lights, grid, OrbitControls (middle = orbit)
   ui.js                lil-gui panel
-  kinematics.js        pure motion math (Geneva, double-Geneva, spur ratios)
+  kinematics.js        pure motion math (spur, Geneva, double-Geneva, internal, planetary)
   math.js              shared helpers
   parts.js             materials + reusable part builders
   gears/
@@ -105,3 +106,8 @@ src/
     internalGear.js
     planetary.js
 ```
+
+## Docs
+
+- [docs/roadmap.md](docs/roadmap.md) — project goal and feature status.
+- [docs/sator-square.md](docs/sator-square.md) — design for a planned SATOR-square mode.
