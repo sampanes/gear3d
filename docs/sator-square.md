@@ -62,6 +62,7 @@ the detents — exactly what the O trick avoids).
 | **Always-upright** | orbits, orientation held | 1:1 anti-rotation referenced to the hub (idler / ring) | **any** (the default) |
 | **Flip / click** | dwells, toggles upright ↔ inverted | double-Geneva, dwell `{0, π}` | symmetric only: **O**, S, N |
 | **Spin** | spins, upright only *at* each detent | fixed-sun planetary, `zSun/zPlanet = 3` | any (best on symmetric; non-symmetric only if you stop at detents) — the "diversity" exception |
+| **Index / click** | clicks through discrete steps (single Geneva) | stepped spin: `clicks` per tile-turn × `n` turns/board | any — but reads upright at the detents **only when the winding `n` is a multiple of 4** (the readout reports it; a free choice for experimenting with clicking motion) |
 
 A natural default palette: 4 **O**'s flip; the 2 corner **S**'s may flip or spin
 (free, since S is symmetric); one **A**/**T** set to spin as the exception;

@@ -37,7 +37,7 @@ const CONFIG = {
   internal: { module: 4, pinionTeeth: 12, ringTeeth: 48, pressureAngle: 20, thickness: 8 },
   planetary: { module: 4, sunTeeth: 12, planetTeeth: 12, planets: 3, pressureAngle: 20, thickness: 8, fixed: 'ring' },
   bevel: { module: 4, pinionTeeth: 16, gearTeeth: 24, pressureAngle: 20, faceWidth: 14 },
-  sator: { cell: 40, thickness: 6, spinN: 4, pushFrac: 0.62 },
+  sator: { cell: 40, thickness: 6, spinN: 4, indexClicks: 4, pushFrac: 0.62 },
 };
 
 const builders = [
@@ -330,6 +330,23 @@ test('every built-in preset assigns a legal behavior to all 25 cells', () => {
         assert.ok(behaviorOptions(r, c).includes(cells[cellKey(r, c)]), `${name}: (${r},${c})=${cells[cellKey(r, c)]} illegal`);
       }
     }
+  }
+});
+
+test('SatorSquare: index (single-Geneva click) tiles report emergent legibility tracking the winding', () => {
+  const cells = defaultCells();
+  cells[cellKey(0, 3)] = 'index'; // (0,3) is an O — index is allowed
+  const legible = new SatorSquare({ ...CONFIG.sator, cells, spinN: 4 });
+  const broken = new SatorSquare({ ...CONFIG.sator, cells, spinN: 1 });
+  assert.equal(legible.counts.index, 1, 'one index tile');
+  assert.equal(legible.legible, true, 'winding 4 → upright at every 90° detent');
+  assert.equal(broken.legible, false, 'winding 1 → not upright at the detents');
+  // when legible, the index tile actually reads upright at each 90° detent
+  for (let j = 0; j < 4; j++) {
+    legible.update((j * Math.PI) / 2);
+    const t = legible.tiles.find((x) => x.behavior === 'index');
+    const world = mod(legible.decor.rotation.z + t.letterPivot.rotation.z, TAU);
+    assert.ok(Math.min(world, TAU - world) < 1e-6, `index tile upright at detent ${j} (world ${world})`);
   }
 });
 

@@ -21,6 +21,8 @@ import {
   spinSunPlanetRatio,
   flipAngle,
   atQuarterDetent,
+  indexAbsolute,
+  indexUpright,
   satorTileAngle,
 } from '../src/kinematics.js';
 
@@ -402,6 +404,34 @@ test('satorTileAngle dispatches each behavior and the square is legible at every
     );
   }
   assert.throws(() => satorTileAngle('bogus', 0), /unknown SATOR tile behavior/);
+});
+
+test('indexAbsolute: stepped spin winds n turns/board and is upright at the detents iff n%4==0', () => {
+  // legible case n=4: absolute is a multiple of 2π at every 90° detent
+  for (let j = 0; j < 4; j++) {
+    near(mod(indexAbsolute((j * Math.PI) / 2, 4, 4), TAU), 0, 1e-9, `n=4 upright at detent ${j}`);
+  }
+  // illegible windings land the letter sideways/inverted at some detents
+  assert.ok(mod(indexAbsolute(Math.PI / 2, 1, 4), TAU) > 1e-3, 'n=1 sideways at 90°');
+  assert.ok(mod(indexAbsolute(Math.PI / 2, 2, 4), TAU) > 1e-3, 'n=2 not upright at 90°');
+  // wraps continuously across the board revolution (net = n turns ≡ 0 mod 2π)
+  near(mod(indexAbsolute(TAU - 1e-9, 4, 4), TAU), 0, 1e-3, 'wraps to upright');
+  assert.equal(indexUpright(4), true);
+  assert.equal(indexUpright(8), true);
+  assert.equal(indexUpright(1), false);
+  assert.equal(indexUpright(2), false);
+});
+
+test('indexAbsolute: discrete clicks — a staircase that dwells between equal steps', () => {
+  const n = 4;
+  const clicks = 4;
+  const pf = 0.5;
+  const interval = TAU / (n * clicks); // board angle per click
+  const step = TAU / clicks; // 90° per click
+  const at = (m) => indexAbsolute(m * interval, n, clicks, pf);
+  near(at(0.9), step, 1e-9, 'after the first click = one step');
+  near(at(1.9), 2 * step, 1e-9, 'after the second click = two steps');
+  near(at(0.7), at(0.95), 1e-12, 'value is flat (dwell) between clicks');
 });
 
 test('satorTileAngle: flip freq must be a positive even integer (odd freq breaks detent legibility)', () => {

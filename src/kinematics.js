@@ -288,12 +288,39 @@ export function atQuarterDetent(phi, tol = 1e-9) {
   return Math.min(r, q - r) <= tol;
 }
 
+// Index/click tile: a single-Geneva-style stepped spin. The tile winds `n` full
+// turns per board revolution (like the smooth spin) but in discrete clicks —
+// `clicks` clicks per tile-turn, so each click is 360/clicks (4 -> quarter-turn
+// clicks, 8 -> eighth-turn), eased with a soft push-then-dwell. Returns the
+// ABSOLUTE orientation (Φ + ψ). Legibility is emergent, not hard-coded: the tile
+// reads upright at every 90° detent only when `n` is a multiple of 4 (see
+// indexUpright) — the same rule as the smooth spin — so any (clicks, n) can be
+// dialed in and watched succeed or fail.
+export function indexAbsolute(phi, n, clicks, pushFrac = 0.5) {
+  const total = Math.max(1, Math.round(n * clicks)); // clicks per board revolution
+  const step = (n * TAU) / total; // orientation gained per click (= TAU / clicks)
+  const interval = TAU / total; // board angle per click
+  const p = mod(phi, TAU);
+  const i = Math.floor(p / interval);
+  const frac = (p - i * interval) / interval; // 0..1 within the current click
+  const w = clamp(pushFrac, 0.05, 1);
+  const ease = frac < w ? smootherstep(frac / w) : 1; // push, then dwell
+  return (i + ease) * step;
+}
+
+// Whether an n-turn index/spin tile reads upright at every 90° detent.
+export function indexUpright(n) {
+  return mod(n, 4) === 0;
+}
+
 // Per-cell behavior dispatcher: maps a tile behavior to its psi(Phi) — the
 // rotation relative to the board, for rendering. The gear network (planetary /
 // idler-ring / double-Geneva) is the printable realization of these forms.
 //   'fixed'   on-axis hub tile (centre N): held in the wall frame -> psi = -Phi
 //   'upright' orbits to a new cell but holds orientation          -> psi = -Phi
 //   'spin'    N full turns per board turn (params.n, mult of 4)    -> psi = (N-1)Phi
+//   'index'   spin in discrete clicks: params.clicks per tile-turn, params.n
+//             turns per board turn (reads upright at the detents iff n mult of 4)
 //   'flip'    O tiles: upright <-> inverted via double-Geneva. params.freq sets
 //             flips per board turn and must be a POSITIVE EVEN integer (default
 //             2) so the dwells land on the 90deg detents; an odd freq would
@@ -306,6 +333,8 @@ export function satorTileAngle(behavior, phi, params = {}) {
       return alwaysUprightAngle(phi);
     case 'spin':
       return spinAngle(phi, params.n ?? 4);
+    case 'index': // single-Geneva stepped spin; psi = absolute - board angle
+      return indexAbsolute(phi, params.n ?? 4, params.clicks ?? 4, params.pushFrac ?? 0.5) - phi;
     case 'flip': {
       const freq = params.freq ?? 2;
       if (!Number.isInteger(freq) || freq <= 0 || freq % 2 !== 0) {

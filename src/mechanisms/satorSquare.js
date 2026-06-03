@@ -10,7 +10,7 @@
 // export serialises) and `decor` (the block-letter glyphs, printed separately).
 
 import * as THREE from 'three';
-import { satorTileAngle } from '../kinematics.js';
+import { satorTileAngle, indexUpright } from '../kinematics.js';
 import { PALETTE, metal, disc, disposeObject } from '../parts.js';
 
 export const SATOR_WORD = ['SATOR', 'AREPO', 'TENET', 'OPERA', 'ROTAS'];
@@ -27,7 +27,9 @@ export const cellKey = (row, col) => `${row},${col}`;
 // letter; upright and spin are valid for any tile.
 export function behaviorOptions(row, col) {
   if (row === 2 && col === 2) return ['fixed'];
-  return SYMMETRIC.has(letterAt(row, col)) ? ['upright', 'flip', 'spin'] : ['upright', 'spin'];
+  // 'index' (single-Geneva clicking) is allowed anywhere, like spin; whether it
+  // reads upright at the detents is emergent (depends on the turns/board, spinN).
+  return SYMMETRIC.has(letterAt(row, col)) ? ['upright', 'flip', 'spin', 'index'] : ['upright', 'spin', 'index'];
 }
 
 function mapCells(fn) {
@@ -65,6 +67,12 @@ export const PRESETS = {
       if (L === 'S') return 'spin';
       return (r + c) % 4 === 0 ? 'spin' : 'upright';
     }),
+  Clockwork: () =>
+    mapCells((r, c) => {
+      if (r === 2 && c === 2) return 'fixed';
+      if (letterAt(r, c) === 'O') return 'index'; // the O's click around
+      return SYMMETRIC.has(letterAt(r, c)) ? 'spin' : 'upright';
+    }),
 };
 
 // 3×5 block-letter bitmaps (rows top→bottom) for the glyphs the square uses.
@@ -83,6 +91,7 @@ const TILE_COLOR = {
   fixed: PALETTE.lock,
   flip: PALETTE.driven,
   spin: PALETTE.driver,
+  index: PALETTE.pin,
   upright: PALETTE.output,
 };
 
@@ -114,7 +123,8 @@ export class SatorSquare {
     this.group = new THREE.Group();
     const cell = p.cell ?? 40;
     const thickness = p.thickness ?? 6;
-    this.spinN = p.spinN ?? 4;
+    this.spinN = p.spinN ?? 4; // turns per board revolution for spin AND index tiles
+    this.indexClicks = p.indexClicks ?? 4; // clicks per tile-turn for index tiles
     this.pushFrac = p.pushFrac ?? 0.62;
     const cells = p.cells ?? defaultCells();
 
@@ -136,7 +146,7 @@ export class SatorSquare {
 
     this.tiles = [];
     const tileR = cell * 0.44;
-    const counts = { fixed: 0, flip: 0, spin: 0, upright: 0 };
+    const counts = { fixed: 0, flip: 0, spin: 0, index: 0, upright: 0 };
     for (let row = 0; row < 5; row++) {
       for (let col = 0; col < 5; col++) {
         const letter = letterAt(row, col);
@@ -145,7 +155,12 @@ export class SatorSquare {
         const requested = cells[cellKey(row, col)];
         const behavior = opts.includes(requested) ? requested : opts[0];
         counts[behavior] += 1;
-        const params = behavior === 'spin' ? { n: this.spinN } : { freq: 2, pushFrac: this.pushFrac };
+        const params =
+          behavior === 'spin'
+            ? { n: this.spinN }
+            : behavior === 'index'
+              ? { n: this.spinN, clicks: this.indexClicks, pushFrac: this.pushFrac }
+              : { freq: 2, pushFrac: this.pushFrac };
         const x = (col - 2) * cell;
         const y = (2 - row) * cell;
 
@@ -165,6 +180,12 @@ export class SatorSquare {
       }
     }
     this.counts = counts;
+    // spin/index tiles read upright at the 90° detents only when the winding
+    // (spinN) is a multiple of 4; everything else (upright/fixed/flip) always
+    // does. So the whole square stays legible iff there are no winders, or the
+    // winding is a multiple of 4.
+    const hasWinders = counts.spin + counts.index > 0;
+    this.legible = !hasWinders || indexUpright(this.spinN);
   }
 
   update(phi) {
@@ -179,7 +200,11 @@ export class SatorSquare {
 
   info() {
     const c = this.counts;
-    return `SATOR square (5×5)\nupright ×${c.upright}  flip ×${c.flip} (O)  spin ×${c.spin}  fixed ×${c.fixed} (N)\nreads upright every 90°`;
+    const motion =
+      c.spin + c.index > 0
+        ? `\nspin/index winding ${this.spinN} turns/board · ${this.indexClicks} clicks/turn`
+        : '';
+    return `SATOR square (5×5)\nupright ×${c.upright}  flip ×${c.flip}  spin ×${c.spin}  index ×${c.index}  fixed ×${c.fixed}${motion}\nupright at 90° detents: ${this.legible ? 'yes' : 'NO'}`;
   }
 
   dispose() {
