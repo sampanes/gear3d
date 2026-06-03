@@ -1,9 +1,9 @@
 # SATOR square — mechanism design
 
-> Status: **in progress.** P0 kinematics (`satorTileAngle` & friends) and the
-> P1–P4 mechanism (`src/mechanisms/satorSquare.js`, registered as the *SATOR
-> square* mode) are implemented and unit-tested; the per-cell behavior editor +
-> presets (P5) remain. This document is the design it was built from.
+> Status: **implemented.** All phases — P0 kinematics through the P5 per-cell
+> behavior editor + presets — are built and unit-tested as the *SATOR square*
+> mode (`src/mechanisms/satorSquare.js`). This document is the design it was
+> built from.
 
 A wall-mounted **5×5 letter board** carrying the Latin SATOR word square. You
 turn the whole board on the wall; **every 90° of board rotation the square reads
@@ -141,7 +141,7 @@ The planetary/ring primitives already exist, so the genuinely new pieces are:
 - **P2 ✅** motion: always-upright + spin tiles, verified upright at each 90°.
 - **P3 ✅** the four O tiles flipping via the generalized double-Geneva.
 - **P4 ✅** printable/decor split — STL export passes `mechanism.printable` (letters excluded).
-- **P5 ⬜** UI behavior editor, presets, optional educational overlays.
+- **P5 ✅** per-cell behavior editor + built-in presets (Default / All upright / Max flip / Playful).
 
 ## How it ships
 

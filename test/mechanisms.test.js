@@ -14,7 +14,7 @@ import { DoubleGeneva } from '../src/mechanisms/doubleGeneva.js';
 import { InternalGear } from '../src/mechanisms/internalGear.js';
 import { Planetary } from '../src/mechanisms/planetary.js';
 import { BevelPair } from '../src/mechanisms/bevelGears.js';
-import { SatorSquare } from '../src/mechanisms/satorSquare.js';
+import { SatorSquare, defaultCells, behaviorOptions, cellKey, PRESETS } from '../src/mechanisms/satorSquare.js';
 import {
   spurTrainPhases,
   spurGearAngle,
@@ -276,4 +276,38 @@ test('SatorSquare: letters live only in decor, not in the printable (STL) sub-gr
   };
   assert.equal(countLetters(m.printable), 0, 'no letters in the printable sub-group');
   assert.equal(countLetters(m.decor), 25, 'all 25 letters in the decor sub-group');
+});
+
+// ----- P5: per-cell editor domain model -----
+test('behaviorOptions enforces the design constraints (flip only on symmetric, fixed only centre)', () => {
+  assert.deepEqual(behaviorOptions(2, 2), ['fixed'], 'centre is the fixed hub only');
+  assert.ok(behaviorOptions(0, 3).includes('flip'), '(0,3) O may flip');
+  assert.ok(behaviorOptions(0, 0).includes('flip'), '(0,0) S may flip');
+  assert.ok(!behaviorOptions(0, 2).includes('flip'), '(0,2) T may NOT flip (not symmetric)');
+  assert.ok(!behaviorOptions(0, 1).includes('fixed'), 'fixed is centre-only');
+  assert.ok(behaviorOptions(0, 2).includes('spin'), 'any tile may spin');
+});
+
+test('every built-in preset assigns a legal behavior to all 25 cells', () => {
+  for (const [name, make] of Object.entries(PRESETS)) {
+    const cells = make();
+    assert.equal(Object.keys(cells).length, 25, `${name}: 25 cells`);
+    for (let r = 0; r < 5; r++) {
+      for (let c = 0; c < 5; c++) {
+        assert.ok(behaviorOptions(r, c).includes(cells[cellKey(r, c)]), `${name}: (${r},${c})=${cells[cellKey(r, c)]} illegal`);
+      }
+    }
+  }
+});
+
+test('SatorSquare honors a custom cells map and rejects illegal behaviors', () => {
+  const cells = defaultCells();
+  cells[cellKey(0, 0)] = 'flip'; // (0,0) S is symmetric — flip is legal
+  cells[cellKey(0, 2)] = 'flip'; // (0,2) T is not symmetric — illegal, must fall back
+  const m = new SatorSquare({ ...CONFIG.sator, cells });
+  const behaviorAt = (r, c) => m.tiles.find((t) => t.row === r && t.col === c).behavior;
+  assert.equal(behaviorAt(0, 0), 'flip', 'S accepts flip');
+  assert.notEqual(behaviorAt(0, 2), 'flip', 'T rejects flip (falls back to a legal option)');
+  assert.ok(behaviorOptions(0, 2).includes(behaviorAt(0, 2)), 'fallback is itself legal');
+  assert.equal(behaviorAt(2, 2), 'fixed', 'centre always fixed');
 });

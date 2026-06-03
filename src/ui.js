@@ -3,6 +3,7 @@
 
 import GUI from 'lil-gui';
 import { setWireframe } from './parts.js';
+import { behaviorOptions, cellKey, PRESETS, SATOR_WORD } from './mechanisms/satorSquare.js';
 
 export function buildGUI(config, actions, modeNames) {
   const gui = new GUI({ title: 'gear3d' });
@@ -86,6 +87,36 @@ export function buildGUI(config, actions, modeNames) {
   const sat = gui.addFolder('SATOR square');
   sat.add(config.sator, 'cell', 24, 60, 1).name('cell size').onChange(actions.rebuild);
   sat.add(config.sator, 'thickness', 2, 12, 0.5).onChange(actions.rebuild);
+
+  // preset palettes: apply a fresh cells map, refresh the per-cell dropdowns,
+  // then rebuild. Manual per-cell edits below override the loaded preset.
+  const cellCtrls = [];
+  sat
+    .add(config.sator, 'preset', Object.keys(PRESETS))
+    .name('preset')
+    .onChange((name) => {
+      Object.assign(config.sator.cells, PRESETS[name]());
+      cellCtrls.forEach((c) => c.updateDisplay());
+      actions.rebuild();
+    });
+
+  // per-cell behavior editor, grouped by row (closed by default). Each cell only
+  // offers the behaviors legal for its letter/position; the centre N is locked.
+  const tiles = sat.addFolder('Tiles (per cell)');
+  tiles.close();
+  for (let r = 0; r < 5; r++) {
+    const rowFolder = tiles.addFolder(`row ${r}:  ${SATOR_WORD[r].split('').join(' ')}`);
+    rowFolder.close();
+    for (let c = 0; c < 5; c++) {
+      const opts = behaviorOptions(r, c);
+      const ctrl = rowFolder
+        .add(config.sator.cells, cellKey(r, c), opts)
+        .name(`${SATOR_WORD[r][c]}  (${r},${c})`)
+        .onChange(actions.rebuild);
+      if (opts.length === 1) ctrl.disable(); // the fixed centre hub
+      cellCtrls.push(ctrl);
+    }
+  }
 
   const folders = {
     'Spur train': spur,

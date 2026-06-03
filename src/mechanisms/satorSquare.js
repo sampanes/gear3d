@@ -4,16 +4,68 @@
 // kinematics in kinematics.satorTileAngle (always-upright idler, fixed hub,
 // fixed-sun planetary spin, double-Geneva O-flip); see docs/sator-square.md.
 //
-// The mechanism splits into two sub-groups that turn together: `printable` (the
-// board + tile gears — what STL export serialises) and `decor` (the block-letter
-// glyphs, printed separately). Both carry identical per-tile transforms so the
-// letters track their tiles while staying excluded from the export.
+// The board is a data-driven "pick & place": a 5×5 map of per-cell behaviors
+// (editable from the UI, choosable from presets). The mechanism splits into two
+// sub-groups that turn together: `printable` (the board + tile gears — what STL
+// export serialises) and `decor` (the block-letter glyphs, printed separately).
 
 import * as THREE from 'three';
 import { satorTileAngle } from '../kinematics.js';
 import { PALETTE, metal, disc, disposeObject } from '../parts.js';
 
-const WORD = ['SATOR', 'AREPO', 'TENET', 'OPERA', 'ROTAS'];
+export const SATOR_WORD = ['SATOR', 'AREPO', 'TENET', 'OPERA', 'ROTAS'];
+
+// Only these letters are 180°-symmetric, so only they may "flip" (a flipped
+// non-symmetric letter would read upside-down at half the detents).
+export const SYMMETRIC = new Set(['O', 'S', 'N']);
+
+export const letterAt = (row, col) => SATOR_WORD[row][col];
+export const cellKey = (row, col) => `${row},${col}`;
+
+// The behaviors a cell may take, honoring the design constraints: the centre
+// (the N, on the rotation axis) is the fixed ground hub; flip needs a symmetric
+// letter; upright and spin are valid for any tile.
+export function behaviorOptions(row, col) {
+  if (row === 2 && col === 2) return ['fixed'];
+  return SYMMETRIC.has(letterAt(row, col)) ? ['upright', 'flip', 'spin'] : ['upright', 'spin'];
+}
+
+function mapCells(fn) {
+  const cells = {};
+  for (let r = 0; r < 5; r++) for (let c = 0; c < 5; c++) cells[cellKey(r, c)] = fn(r, c);
+  return cells;
+}
+
+// The default palette: centre N fixed, the four O's flip, one A spins for
+// variety, everything else upright.
+export function defaultCells() {
+  return mapCells((r, c) => {
+    if (r === 2 && c === 2) return 'fixed';
+    if (letterAt(r, c) === 'O') return 'flip';
+    if (r === 0 && c === 1) return 'spin'; // the diversity tile (an A)
+    return 'upright';
+  });
+}
+
+// Built-in palettes (no persistence — URL/save-load is intentionally out of
+// scope per the roadmap). Each returns a fresh, fully-legal cells map.
+export const PRESETS = {
+  Default: defaultCells,
+  'All upright': () => mapCells((r, c) => (r === 2 && c === 2 ? 'fixed' : 'upright')),
+  'Max flip': () =>
+    mapCells((r, c) => {
+      if (r === 2 && c === 2) return 'fixed';
+      return SYMMETRIC.has(letterAt(r, c)) ? 'flip' : 'upright';
+    }),
+  Playful: () =>
+    mapCells((r, c) => {
+      if (r === 2 && c === 2) return 'fixed';
+      const L = letterAt(r, c);
+      if (L === 'O') return 'flip';
+      if (L === 'S') return 'spin';
+      return (r + c) % 4 === 0 ? 'spin' : 'upright';
+    }),
+};
 
 // 3×5 block-letter bitmaps (rows top→bottom) for the glyphs the square uses.
 const GLYPHS = {
@@ -26,15 +78,6 @@ const GLYPHS = {
   P: ['111', '101', '111', '100', '100'],
   N: ['101', '111', '111', '101', '101'],
 };
-
-// Default per-cell behavior: the centre N is the fixed hub, the four O tiles
-// flip, one A spins for variety, everything else stays upright.
-function defaultBehavior(row, col, letter) {
-  if (row === 2 && col === 2) return 'fixed';
-  if (letter === 'O') return 'flip';
-  if (row === 0 && col === 1) return 'spin'; // the diversity tile (an A)
-  return 'upright';
-}
 
 const TILE_COLOR = {
   fixed: PALETTE.lock,
@@ -73,6 +116,7 @@ export class SatorSquare {
     const thickness = p.thickness ?? 6;
     this.spinN = p.spinN ?? 4;
     this.pushFrac = p.pushFrac ?? 0.62;
+    const cells = p.cells ?? defaultCells();
 
     // Two carriers that rotate together by Phi: printable holds the board + tile
     // gears, decor holds the letters (excluded from STL, printed separately).
@@ -95,8 +139,11 @@ export class SatorSquare {
     const counts = { fixed: 0, flip: 0, spin: 0, upright: 0 };
     for (let row = 0; row < 5; row++) {
       for (let col = 0; col < 5; col++) {
-        const letter = WORD[row][col];
-        const behavior = defaultBehavior(row, col, letter);
+        const letter = letterAt(row, col);
+        // honor the requested behavior only if it is legal for this cell
+        const opts = behaviorOptions(row, col);
+        const requested = cells[cellKey(row, col)];
+        const behavior = opts.includes(requested) ? requested : opts[0];
         counts[behavior] += 1;
         const params = behavior === 'spin' ? { n: this.spinN } : { freq: 2, pushFrac: this.pushFrac };
         const x = (col - 2) * cell;
