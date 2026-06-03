@@ -3,7 +3,7 @@
 A 3D gear generator in the browser — like [geargenerator.com](https://geargenerator.com/),
 but in 3D with CAD-style **middle-mouse orbit**. Build involute **spur / helical gear
 trains**, external **Geneva drives**, **double-Geneva oscillators**, **internal
-(ring) gears**, and **planetary (epicyclic) gearsets**.
+(ring) gears**, **planetary (epicyclic) gearsets**, and **bevel gear pairs**.
 
 Built with [Three.js](https://threejs.org/) + [Vite](https://vitejs.dev/) +
 [lil-gui](https://lil-gui.georgealways.com/).
@@ -35,7 +35,9 @@ npm test         # kinematics + involute-geometry unit tests (node:test, no deps
 | `Space` | pause / resume |
 
 Everything else lives in the top-right panel: pick the mechanism, set speed
-(negative reverses), and tune each mechanism's parameters live.
+(negative reverses), and tune each mechanism's parameters live. The **pitch/base
+circles** toggle overlays each gear's pitch (solid) and base (dashed) circle for
+teaching; the overlay lines are excluded from STL export.
 
 **Export** — the panel's **Export (STL)** folder downloads the current mechanism
 as a single binary STL, ready for slicing and 3D printing. Model units are
@@ -86,16 +88,27 @@ with the sun and the ring at the same time; equal spacing requires
 not). Tune sun and planet teeth, planet count, module, pressure angle, and
 thickness.
 
+### Bevel pair
+Two gears on intersecting shafts (90° by default). Each gear's pitch-cone
+half-angle comes from the standard relation `tan(γ_A) = sin(Σ)/(z_B/z_A + cos(Σ))`
+with `γ_A + γ_B = Σ` (the shaft angle), and the gears counter-rotate about their
+own axes at `ω_B/ω_A = z_A/z_B`. The teeth use a Tredgold (back-cone)
+approximation — the spur profile extruded and tapered toward the shared apex —
+which prints and teaches well without true spherical-involute geometry. Tune
+pinion and gear teeth, module, pressure angle, and face width.
+
 ## Layout
 
 ```
 src/
   main.js              loop, mode switching, GUI wiring
-  scene.js             renderer, lights, grid, OrbitControls (middle = orbit)
+  scene.js             renderer, lights, studio environment, shadow wall, grid, OrbitControls (middle = orbit)
   ui.js                lil-gui panel
-  kinematics.js        pure motion math (spur, Geneva, double-Geneva, internal, planetary)
+  kinematics.js        pure motion math (spur, Geneva, double-Geneva, internal, planetary, bevel)
   math.js              shared helpers
   parts.js             materials + reusable part builders
+  overlays.js          educational pitch/base circle overlays
+  export.js            binary STL export (whole mechanism, uniform mm scale)
   gears/
     involute.js        involute tooth profile
     gear.js            extruded gear mesh
@@ -105,6 +118,7 @@ src/
     doubleGeneva.js
     internalGear.js
     planetary.js
+    bevelGears.js
 ```
 
 ## Docs
