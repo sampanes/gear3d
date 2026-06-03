@@ -25,6 +25,7 @@ import {
   planetaryAngles,
   bevelConeAngles,
   toothPhaseAt,
+  flipAngle,
 } from '../src/kinematics.js';
 
 const near = (a, b, eps = 1e-12, msg = '') => assert.ok(Math.abs(a - b) <= eps, `${msg} ${a} !~= ${b}`);
@@ -348,6 +349,22 @@ test('SatorSquare: index (single-Geneva click) tiles report emergent legibility 
     const world = mod(legible.decor.rotation.z + t.letterPivot.rotation.z, TAU);
     assert.ok(Math.min(world, TAU - world) < 1e-6, `index tile upright at detent ${j} (world ${world})`);
   }
+});
+
+test('SatorSquare: a shared double-Geneva drive is rendered per flip diagonal O-pair', () => {
+  const m = new SatorSquare(CONFIG.sator); // default palette: all four O's flip
+  assert.equal(m.drives.length, 2, 'two flip diagonal pairs → two shared drives');
+  // the drive rocker tracks the {0,π} flip toggle (in sync with the tiles)
+  for (const phi of [0, 0.8, Math.PI, 4.2]) {
+    m.update(phi);
+    near(m.drives[0].rocker.rotation.z, flipAngle(2 * phi, m.pushFrac), 1e-12, `drive rocker @${phi}`);
+  }
+  // a pair with a non-flip O gets no shared drive
+  const cells = defaultCells();
+  cells[cellKey(0, 3)] = 'upright';
+  assert.equal(new SatorSquare({ ...CONFIG.sator, cells }).drives.length, 1, 'broken pair → one drive');
+  // the toggle turns drives off entirely
+  assert.equal(new SatorSquare({ ...CONFIG.sator, drives: false }).drives.length, 0, 'drives:false → none');
 });
 
 test('SatorSquare honors a custom cells map and rejects illegal behaviors', () => {

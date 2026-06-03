@@ -90,6 +90,7 @@ export function buildGUI(config, actions, modeNames) {
   // at the 90° detents (true iff a multiple of 4). Index clicks set the click size.
   sat.add(config.sator, 'spinN', 1, 8, 1).name('turns/board (spin·index)').onChange(actions.rebuild);
   sat.add(config.sator, 'indexClicks', 2, 12, 1).name('index clicks/turn').onChange(actions.rebuild);
+  sat.add(config.sator, 'drives').name('shared O drives').onChange(actions.rebuild);
 
   // preset palettes: apply a fresh cells map, refresh the per-cell dropdowns,
   // then rebuild. Manual per-cell edits below override the loaded preset.
