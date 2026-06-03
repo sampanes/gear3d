@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { DEG } from '../src/math.js';
-import { gearMetrics, gearContour } from '../src/gears/involute.js';
+import { gearMetrics, gearContour, internalGearMetrics, internalGearContour } from '../src/gears/involute.js';
 
 const near = (a, b, eps = 1e-9, msg = '') => assert.ok(Math.abs(a - b) <= eps, `${msg} ${a} !~= ${b}`);
 
@@ -109,4 +109,75 @@ test('tooth thickness at the pitch circle equals pi*m/2 (measured off the genera
   const thicknessAngle = angLeading - angTrailing; // = 2*psi(r) = 2*halfTooth
   near(thicknessAngle, Math.PI / p.teeth, 2e-3, 'angular tooth thickness');
   near(r * thicknessAngle, (Math.PI * p.module) / 2, 2e-3 * r, 'arc tooth thickness = pi*m/2');
+});
+
+// ---------------------------------------------------------------------------
+// Internal (ring) gear
+// ---------------------------------------------------------------------------
+const RINGS = [
+  { module: 4, teeth: 48, pressureAngle: 20 }, // ra >= rb (normal ring)
+  { module: 3, teeth: 60, pressureAngle: 20 },
+  { module: 4, teeth: 32, pressureAngle: 14.5 }, // ra < rb -> radial bridge to the tip
+  { module: 4, teeth: 24, pressureAngle: 14.5 }, // planetary-min ring, ra < rb
+];
+
+test('internalGearMetrics swaps addendum/dedendum (tip inner, root outer)', () => {
+  const g = internalGearMetrics({ module: 4, teeth: 48, pressureAngle: 20 });
+  near(g.ra, g.r - 4); // addendum points inward
+  near(g.rf, g.r + 1.25 * 4); // dedendum opens outward into the rim
+  assert.ok(g.ra < g.r && g.rf > g.r && g.rOuter > g.rf);
+});
+
+test('internalGearContour has no zero-length edges and winds CCW within [ra, rf]', () => {
+  for (const p of RINGS) {
+    const { ra, rf } = internalGearMetrics(p);
+    const pts = internalGearContour(p, 14);
+    let minEdge = Infinity;
+    let area2 = 0;
+    for (let i = 0; i < pts.length; i++) {
+      const a = pts[i];
+      const b = pts[(i + 1) % pts.length];
+      minEdge = Math.min(minEdge, Math.hypot(b.x - a.x, b.y - a.y));
+      area2 += a.x * b.y - b.x * a.y;
+      const rad = Math.hypot(a.x, a.y);
+      assert.ok(rad >= ra - 1e-6 && rad <= rf + 1e-6, `${JSON.stringify(p)}: radius ${rad} out of [ra,rf]`);
+    }
+    assert.ok(minEdge > 1e-6, `${JSON.stringify(p)}: degenerate edge ${minEdge}`);
+    assert.ok(area2 > 0, `${JSON.stringify(p)}: not CCW`);
+  }
+});
+
+test('internal tooth reaches its true addendum ra even when ra < rb (radial-bridge regression)', () => {
+  for (const p of RINGS) {
+    const { ra, rb } = internalGearMetrics(p);
+    const pts = internalGearContour(p, 14);
+    let minR = Infinity;
+    for (const q of pts) minR = Math.min(minR, Math.hypot(q.x, q.y));
+    // the inner tip must sit at the design addendum ra, NOT be truncated at rb
+    near(minR, ra, 1e-6, `${JSON.stringify(p)} ra(${ra}) rb(${rb})`);
+  }
+});
+
+test('internal tooth thickness at the pitch circle equals pi*m/2', () => {
+  for (const p of RINGS) {
+    const { r, ra, rf } = internalGearMetrics(p);
+    const pts = internalGearContour(p, 200);
+    // tooth 0 is centred at angle 0; gather flank points straddling it
+    const win = Math.PI / p.teeth; // half pitch angle
+    const tooth0 = pts
+      .map((q) => ({ rad: Math.hypot(q.x, q.y), ang: Math.atan2(q.y, q.x) }))
+      .filter((q) => Math.abs(q.ang) < win && q.rad >= ra - 1e-6 && q.rad < rf - 1e-6);
+    const left = tooth0.filter((q) => q.ang < 0).sort((a, b) => a.rad - b.rad);
+    const right = tooth0.filter((q) => q.ang > 0).sort((a, b) => a.rad - b.rad);
+    const interp = (arr, rad) => {
+      for (let i = 0; i + 1 < arr.length; i++)
+        if (rad >= arr[i].rad && rad <= arr[i + 1].rad) {
+          const t = (rad - arr[i].rad) / (arr[i + 1].rad - arr[i].rad);
+          return arr[i].ang + (arr[i + 1].ang - arr[i].ang) * t;
+        }
+      throw new Error(`radius ${rad} not bracketed`);
+    };
+    const thickness = (interp(right, r) - interp(left, r)) * r;
+    near(thickness, (Math.PI * p.module) / 2, 3e-3 * r, `${JSON.stringify(p)}`);
+  }
 });

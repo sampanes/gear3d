@@ -112,8 +112,12 @@ export function internalGearMetrics({ module: m, teeth: z, pressureAngle = 20, r
 // Inner toothed boundary of an internal gear as THREE.Vector2[], wound CCW and
 // closed. The tooth angular half-width is phi(rho) = pitch/2 - psi(rho): equal
 // to an external tooth at the pitch circle, but it widens toward the outer root
-// and narrows to the inner tip — the radial negative of an external tooth. Use
-// this as a (reversed) hole inside a plain outer-rim circle.
+// and narrows to the inner tip — the radial negative of an external tooth. When
+// the design tip ra falls below the base circle (low teeth / low pressure
+// angle) the involute flank stops at rb and a short radial segment bridges in to
+// ra, so the tooth still reaches its true addendum — mirroring how the external
+// gear bridges [rf, rb] down to its root. Use this as a (reversed) hole inside a
+// plain outer-rim circle.
 export function internalGearContour(params, stepsPerFlank = 14) {
   const { z, alpha, rb, ra, rf } = internalGearMetrics(params);
   const pitch = TAU / z;
@@ -121,7 +125,8 @@ export function internalGearContour(params, stepsPerFlank = 14) {
   const halfTooth = Math.PI / (2 * z);
   const invAlpha = involute(alpha);
 
-  const rIn = Math.max(ra, rb); // the involute (hence the flank) stops at rb
+  const rIn = Math.max(ra, rb); // the involute flank stops at the base circle
+  const rTip = ra; // the true (design) addendum the tooth tip must reach
   const rOut = rf;
 
   // tooth angular half-width at radius rho: narrow at the inner tip, wide at root
@@ -141,16 +146,20 @@ export function internalGearContour(params, stepsPerFlank = 14) {
   for (let i = 0; i < z; i++) {
     const c = i * pitch; // tooth centre line
 
-    // left flank: outer root -> inner tip, angle c - phi(rho)
+    // left flank: outer root -> flank base (base circle), angle c - phi(rho)
     for (let k = 0; k <= stepsPerFlank; k++) {
       const rho = rOut + (rIn - rOut) * (k / stepsPerFlank);
       push(rho, c - phi(rho));
     }
-    // inner tip arc, -phiIn -> +phiIn (skip first; the left flank emitted it)
+    // when the tip sits below the base circle (ra < rb) the involute can't reach
+    // it, so bridge radially in to the true addendum (no-op when ra >= rb)
+    if (rIn > rTip) push(rTip, c - phiIn);
+    // inner tip arc at the true addendum, -phiIn -> +phiIn (skip first; emitted)
     for (let k = 1; k <= tipSteps; k++) {
-      push(rIn, c - phiIn + 2 * phiIn * (k / tipSteps));
+      push(rTip, c - phiIn + 2 * phiIn * (k / tipSteps));
     }
-    // right flank: inner tip -> outer root, angle c + phi(rho) (skip first)
+    if (rIn > rTip) push(rIn, c + phiIn); // radial climb back to the flank base
+    // right flank: flank base -> outer root, angle c + phi(rho) (skip first)
     for (let k = 1; k <= stepsPerFlank; k++) {
       const rho = rIn + (rOut - rIn) * (k / stepsPerFlank);
       push(rho, c + phi(rho));

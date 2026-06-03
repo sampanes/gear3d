@@ -14,7 +14,10 @@ export class InternalGear {
     this.group = new THREE.Group();
     const { module: m, pressureAngle: pa, thickness: t } = p;
     this.zp = p.pinionTeeth;
-    this.zr = Math.max(p.ringTeeth, this.zp + 4); // ring must be the larger gear
+    // Ring must be the larger gear. For clean involute meshing without tip
+    // interference a tooth-count difference of ~10+ is preferable; the GUI ranges
+    // keep it well above this in normal use, so +4 is just a validity floor.
+    this.zr = Math.max(p.ringTeeth, this.zp + 4);
 
     const pinM = gearMetrics({ module: m, teeth: this.zp, pressureAngle: pa });
     const ringM = internalGearMetrics({ module: m, teeth: this.zr, pressureAngle: pa });
