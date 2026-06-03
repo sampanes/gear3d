@@ -3,6 +3,7 @@
 
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 
 export function createViewer(canvas) {
   const renderer = new THREE.WebGLRenderer({
@@ -66,6 +67,21 @@ export function createViewer(canvas) {
   grid.rotation.x = Math.PI / 2; // XZ -> XY
   grid.position.z = -40;
   scene.add(grid);
+
+  // Procedural studio environment so the metal materials get realistic
+  // reflections (generated once, no external HDR asset needed).
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
+  // A back "wall" just behind the grid that shows only the mechanism's shadow —
+  // grounds the piece and reads as the wall-mounted surface it will become.
+  const wall = new THREE.Mesh(
+    new THREE.PlaneGeometry(6000, 6000),
+    new THREE.ShadowMaterial({ opacity: 0.32 })
+  );
+  wall.position.z = -42;
+  wall.receiveShadow = true;
+  scene.add(wall);
 
   function resize() {
     const w = canvas.clientWidth || window.innerWidth;

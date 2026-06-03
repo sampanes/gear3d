@@ -15,7 +15,7 @@ const _materials = new Map();
 
 // One shared MeshStandardMaterial per (color, opacity) — cheaper and lets the
 // UI flip wireframe on every gear at once.
-export function metal(color, { opacity = 1, rough = 0.45, metalness = 0.6 } = {}) {
+export function metal(color, { opacity = 1, rough = 0.4, metalness = 0.7 } = {}) {
   const key = `${color}|${opacity}|${rough}|${metalness}`;
   if (!_materials.has(key)) {
     _materials.set(
