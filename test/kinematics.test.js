@@ -15,6 +15,12 @@ import {
   planetaryAngles,
   planetaryAssembly,
   bevelConeAngles,
+  alwaysUprightAngle,
+  spinAngle,
+  spinSunPlanetRatio,
+  flipAngle,
+  atQuarterDetent,
+  satorTileAngle,
 } from '../src/kinematics.js';
 
 const near = (a, b, eps = 1e-9, msg = '') => assert.ok(Math.abs(a - b) <= eps, `${msg} ${a} !~= ${b}`);
@@ -270,4 +276,87 @@ test('bevelConeAngles: half-angles sum to the shaft angle; ratio = zA/zB', () =>
   near(Math.tan(b.gammaA), 16 / 24, 1e-9, 'tan(gammaA) = zA/zB at 90 deg');
   near(b.ratio, 16 / 24);
   assert.ok(b.gammaA < b.gammaB, 'the smaller gear has the smaller cone angle');
+});
+
+// ---------------------------------------------------------------------------
+// SATOR square — per-tile behaviors (P0 kinematics)
+// ---------------------------------------------------------------------------
+test('doubleGenevaOutput: explicit {lo,hi} retargets the dwells (O-flip {0,π}) and the default is unchanged', () => {
+  const pf = 0.62;
+  const w = pf * Math.PI;
+  const o = (t) => doubleGenevaOutput(t, 0, pf, { lo: 0, hi: Math.PI });
+  near(o(0).angle, 0, 1e-9, 'starts at lo = 0');
+  near(o(w).angle, Math.PI, 1e-9, 'end of push A = hi = π');
+  near(o((w + Math.PI) / 2).angle, Math.PI, 1e-9, 'dwell at hi = π');
+  near(o(Math.PI + w).angle, 0, 1e-9, 'end of push B = lo = 0');
+  // backward compatible: no opts still rocks between -amp and +amp
+  near(doubleGenevaOutput(0, 0.6).angle, -0.6, 1e-9, 'default lo still -amp');
+  near(doubleGenevaOutput(w, 0.6).angle, 0.6, 1e-9, 'default hi still +amp');
+});
+
+test('alwaysUprightAngle holds orientation: absolute = Φ + ψ = 0 for all Φ', () => {
+  for (const phi of [0, 0.5, 1.7, Math.PI, 4.2, -2.1]) {
+    near(alwaysUprightAngle(phi), -phi, 1e-12);
+    near(phi + alwaysUprightAngle(phi), 0, 1e-12, 'absolute orientation is 0');
+  }
+});
+
+test('spinAngle: absolute = N·Φ, upright (≡0 mod 2π) at every 90° detent for N≡0 mod 4', () => {
+  for (const n of [4, 8]) {
+    near(spinSunPlanetRatio(n), n - 1, 1e-12, 'zSun/zPlanet = N - 1');
+    for (let k = 0; k < 8; k++) {
+      const phi = (k * Math.PI) / 2; // k·90°
+      const absolute = phi + spinAngle(phi, n);
+      near(absolute, n * phi, 1e-12, 'absolute = N·Φ');
+      near(mod(absolute, TAU), 0, 1e-9, `upright at Φ=${k}·90° for N=${n}`);
+    }
+  }
+});
+
+test('spinAngle matches the fixed-sun planetary realization (planetSpin)', () => {
+  // zSun/zPlanet = N-1 = 3 -> planetSpin = Φ·(1+3) = 4Φ = absolute = Φ + spinAngle(Φ,4)
+  const zSun = 36;
+  const zPlanet = 12; // ratio 3
+  for (const phi of [0.3, 1.1, 2.7, -0.9]) {
+    const a = planetaryAngles(phi, zSun, zPlanet, 'sun');
+    near(a.planetSpin, phi + spinAngle(phi, 4), 1e-9, 'planetSpin = absolute spin angle');
+  }
+});
+
+test('flipAngle toggles between 0 and π via the {0,π} double-Geneva', () => {
+  const w = 0.62 * Math.PI;
+  near(flipAngle(0), 0, 1e-9);
+  near(flipAngle(w), Math.PI, 1e-9);
+});
+
+test('atQuarterDetent is true only at k·90°', () => {
+  for (const phi of [0, Math.PI / 2, Math.PI, (3 * Math.PI) / 2, TAU, -Math.PI / 2]) {
+    assert.ok(atQuarterDetent(phi), `detent at ${phi}`);
+  }
+  for (const phi of [Math.PI / 4, 0.1, 1.0, 2.0]) {
+    assert.ok(!atQuarterDetent(phi), `not a detent at ${phi}`);
+  }
+});
+
+test('satorTileAngle dispatches each behavior and the square is legible at every 90° detent', () => {
+  for (const phi of [0, Math.PI / 2, Math.PI, (3 * Math.PI) / 2]) {
+    near(satorTileAngle('upright', phi), -phi, 1e-12, 'upright = -Φ');
+    near(satorTileAngle('fixed', phi), -phi, 1e-12, 'fixed = -Φ');
+    near(satorTileAngle('spin', phi, { n: 4 }), 3 * phi, 1e-12, 'spin = (N-1)Φ');
+    // flip tile absolute orientation lands on 0 or π (both legible for the symmetric O)
+    const absFlip = mod(phi + satorTileAngle('flip', phi), TAU);
+    assert.ok(
+      Math.min(absFlip, Math.abs(absFlip - Math.PI), TAU - absFlip) < 1e-6,
+      `O flip legible at Φ=${phi} (absolute ${absFlip})`
+    );
+  }
+  assert.throws(() => satorTileAngle('bogus', 0), /unknown SATOR tile behavior/);
+});
+
+test('satorTileAngle: flip freq must be a positive even integer (odd freq breaks detent legibility)', () => {
+  assert.doesNotThrow(() => satorTileAngle('flip', 0, { freq: 2 }));
+  assert.doesNotThrow(() => satorTileAngle('flip', 0, { freq: 4 }));
+  assert.throws(() => satorTileAngle('flip', 0, { freq: 3 }), /positive even integer/);
+  assert.throws(() => satorTileAngle('flip', 0, { freq: 0 }), /positive even integer/);
+  assert.throws(() => satorTileAngle('flip', 0, { freq: 2.5 }), /positive even integer/);
 });

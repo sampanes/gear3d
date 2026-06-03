@@ -1,0 +1,9 @@
+#!/bin/sh
+# gear3d pre-commit gate: run the unit suite (and lint, if configured) before
+# allowing a commit. Enable once per clone with:
+#     git config core.hooksPath .githooks
+set -e
+echo "pre-commit → npm test"
+npm test --silent
+echo "pre-commit → npm run lint (if present)"
+npm run lint --if-present --silent

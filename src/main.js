@@ -39,23 +39,29 @@ const HOME = viewer.camera.position.clone();
 let mechanism = null;
 let driverAngle = 0;
 
-function build() {
-  if (mechanism) mechanism.dispose();
-  if (config.mode === 'Spur train') {
+// One registry mapping each mode name to its mechanism factory — the single
+// source of truth for both the build dispatch below and the GUI's mode list, so
+// the two cannot drift, and an unknown mode fails loudly instead of silently
+// falling through to a default. Adding a mode (e.g. a future SATOR square) is
+// one entry here plus its `config` block above.
+const MODES = {
+  'Spur train': () => {
     const s = config.spur;
     const teeth = [s.t1, s.t2, s.t3, s.t4, s.t5].slice(0, s.gears);
-    mechanism = new SpurTrain({ teeth, module: s.module, pressureAngle: s.pressureAngle, thickness: s.thickness });
-  } else if (config.mode === 'Geneva') {
-    mechanism = new Geneva(config.geneva);
-  } else if (config.mode === 'Double Geneva') {
-    mechanism = new DoubleGeneva(config.double);
-  } else if (config.mode === 'Internal gear') {
-    mechanism = new InternalGear(config.internal);
-  } else if (config.mode === 'Planetary') {
-    mechanism = new Planetary(config.planetary);
-  } else {
-    mechanism = new BevelPair(config.bevel);
-  }
+    return new SpurTrain({ teeth, module: s.module, pressureAngle: s.pressureAngle, thickness: s.thickness, helix: s.helix });
+  },
+  Geneva: () => new Geneva(config.geneva),
+  'Double Geneva': () => new DoubleGeneva(config.double),
+  'Internal gear': () => new InternalGear(config.internal),
+  Planetary: () => new Planetary(config.planetary),
+  Bevel: () => new BevelPair(config.bevel),
+};
+
+function build() {
+  if (mechanism) mechanism.dispose();
+  const make = MODES[config.mode];
+  if (!make) throw new Error(`unknown mechanism mode: ${config.mode}`);
+  mechanism = make();
   viewer.scene.add(mechanism.group);
   setWireframe(config.wireframe);
   if (config.overlays) showOverlays(mechanism.group);
@@ -82,11 +88,14 @@ const actions = {
     const name = config.mode.toLowerCase().replace(/\s+/g, '-');
     const s = config.export.scale;
     const tag = s === 1 ? '' : `-x${s}`; // record the scale in the filename
-    saveSTL(mechanism.group, `gear3d-${name}${tag}.stl`, s);
+    // `printable` lets a mechanism export a subset of its parts (e.g. a future
+    // SATOR mode prints gears but not the decorative letters); falls back to the
+    // whole group for every mechanism that doesn't split itself.
+    saveSTL(mechanism.printable ?? mechanism.group, `gear3d-${name}${tag}.stl`, s);
   },
 };
 
-buildGUI(config, actions);
+buildGUI(config, actions, Object.keys(MODES));
 build();
 
 // keyboard shortcuts

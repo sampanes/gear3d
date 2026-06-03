@@ -67,25 +67,28 @@ export function genevaStarAngle(theta, n) {
 //
 // Returns { angle, active, drive } where `active` is 0 (dwell), 1 (wheel 1
 // driving), or 2 (wheel 2 driving), and `drive` is 0..1 progress through the
-// current push (for visuals).
-export function doubleGenevaOutput(theta, amp, pushFrac = 0.62) {
+// current push (for visuals). By default the lever rocks between -amp and +amp;
+// pass explicit dwell targets { lo, hi } to retarget the two extremes — the
+// SATOR O-flip uses { lo: 0, hi: PI } to toggle a tile upright <-> inverted.
+export function doubleGenevaOutput(theta, amp, pushFrac = 0.62, { lo = -amp, hi = amp } = {}) {
   const w = clamp(pushFrac, 0.05, 1) * Math.PI; // push duration in driver radians
   const ph = mod(theta, TAU);
+  const span = hi - lo;
 
   if (ph < w) {
-    // wheel 1 drives the lever from -amp up to +amp
+    // wheel 1 drives the lever from lo up to hi
     const t = smootherstep(ph / w);
-    return { angle: -amp + 2 * amp * t, active: 1, drive: ph / w };
+    return { angle: lo + span * t, active: 1, drive: ph / w };
   }
   if (ph < Math.PI) {
-    return { angle: amp, active: 0, drive: 0 }; // dwell at +amp
+    return { angle: hi, active: 0, drive: 0 }; // dwell at hi
   }
   if (ph < Math.PI + w) {
-    // wheel 2 drives the lever from +amp back down to -amp
+    // wheel 2 drives the lever from hi back down to lo
     const t = smootherstep((ph - Math.PI) / w);
-    return { angle: amp - 2 * amp * t, active: 2, drive: (ph - Math.PI) / w };
+    return { angle: hi - span * t, active: 2, drive: (ph - Math.PI) / w };
   }
-  return { angle: -amp, active: 0, drive: 0 }; // dwell at -amp
+  return { angle: lo, active: 0, drive: 0 }; // dwell at lo
 }
 
 // Pin offset (added to the shared wheel angle) that puts a wheel's pin at the
@@ -199,4 +202,81 @@ export function planetaryAssembly(zSun, zRing, nPlanets) {
 export function bevelConeAngles(zA, zB, shaft = Math.PI / 2) {
   const gammaA = Math.atan2(Math.sin(shaft), zB / zA + Math.cos(shaft));
   return { gammaA, gammaB: shaft - gammaA, ratio: zA / zB };
+}
+
+// ---------------------------------------------------------------------------
+// SATOR square — per-tile behaviors (planned mode; see docs/sator-square.md)
+// ---------------------------------------------------------------------------
+// The board (carrier) turns by Phi; a tile's absolute orientation in the wall
+// frame is  absolute = Phi + psi,  where psi is the tile's rotation relative to
+// the board (what these helpers return). The square reads upright again at every
+// Phi = k*90deg, which requires absolute ≡ 0 (mod 2*PI) at those Phi — i.e.
+// absolute = N*Phi with N a multiple of 4. These are the closed forms the gear
+// realizations (planetary for spin, idler/ring for upright, double-Geneva for
+// the O flip) are built to reproduce.
+
+// Always-upright idler: the tile orbits with the board but holds its orientation
+// (absolute = 0), so relative to the board psi = -Phi.
+export function alwaysUprightAngle(phi) {
+  return -phi;
+}
+
+// Spin tile: turns N full revolutions per board revolution, passing through
+// upright exactly at each 90deg detent (N must be a multiple of 4). Absolute is
+// N*Phi, so relative to the board psi = (N - 1)*Phi.
+export function spinAngle(phi, n = 4) {
+  return (n - 1) * phi;
+}
+
+// Gear ratio zSun/zPlanet for the fixed-sun planetary that realizes an N-spin
+// tile: planetaryAngles(...,'sun').planetSpin = Phi*(1 + zSun/zPlanet), and we
+// want that = N*Phi, so zSun/zPlanet = N - 1 (e.g. N = 4 -> 3, zSun=36/zPlanet=12).
+export function spinSunPlanetRatio(n = 4) {
+  return n - 1;
+}
+
+// O flip: dwells upright (0), toggles to inverted (PI) and back, driven by the
+// double-Geneva with dwell targets {0, PI}. A symmetric letter (O) reads the
+// same at 0 and PI, so it stays legible at both dwells. This is the pure toggle;
+// see satorTileAngle for the composed tile motion.
+export function flipAngle(theta, pushFrac = 0.62) {
+  return doubleGenevaOutput(theta, 0, pushFrac, { lo: 0, hi: Math.PI }).angle;
+}
+
+// Quarter-turn detents: returns true when the board angle phi is within `tol`
+// of a k*90deg detent (where the square must read upright).
+export function atQuarterDetent(phi, tol = 1e-9) {
+  const q = Math.PI / 2;
+  const r = mod(phi, q);
+  return Math.min(r, q - r) <= tol;
+}
+
+// Per-cell behavior dispatcher: maps a tile behavior to its psi(Phi) — the
+// rotation relative to the board, for rendering. The gear network (planetary /
+// idler-ring / double-Geneva) is the printable realization of these forms.
+//   'fixed'   on-axis hub tile (centre N): held in the wall frame -> psi = -Phi
+//   'upright' orbits to a new cell but holds orientation          -> psi = -Phi
+//   'spin'    N full turns per board turn (params.n, mult of 4)    -> psi = (N-1)Phi
+//   'flip'    O tiles: upright <-> inverted via double-Geneva. params.freq sets
+//             flips per board turn and must be a POSITIVE EVEN integer (default
+//             2) so the dwells land on the 90deg detents; an odd freq would
+//             leave the O mid-flip at the 90/270deg detents and is rejected.
+//             params.pushFrac tunes the push/dwell split.
+export function satorTileAngle(behavior, phi, params = {}) {
+  switch (behavior) {
+    case 'fixed':
+    case 'upright':
+      return alwaysUprightAngle(phi);
+    case 'spin':
+      return spinAngle(phi, params.n ?? 4);
+    case 'flip': {
+      const freq = params.freq ?? 2;
+      if (!Number.isInteger(freq) || freq <= 0 || freq % 2 !== 0) {
+        throw new Error(`SATOR flip freq must be a positive even integer (got ${freq}); only even freq keeps the O legible at every 90° detent`);
+      }
+      return alwaysUprightAngle(phi) + flipAngle(freq * phi, params.pushFrac ?? 0.62);
+    }
+    default:
+      throw new Error(`unknown SATOR tile behavior: ${behavior}`);
+  }
 }

@@ -4,11 +4,11 @@
 import GUI from 'lil-gui';
 import { setWireframe } from './parts.js';
 
-export function buildGUI(config, actions) {
+export function buildGUI(config, actions, modeNames) {
   const gui = new GUI({ title: 'gear3d' });
 
   gui
-    .add(config, 'mode', ['Spur train', 'Geneva', 'Double Geneva', 'Internal gear', 'Planetary', 'Bevel'])
+    .add(config, 'mode', modeNames)
     .name('mechanism')
     .onChange(() => {
       refresh();

@@ -12,24 +12,27 @@ import { STLExporter } from 'three/addons/exporters/STLExporter.js';
 
 const exporter = new STLExporter();
 
-// Serialise `object` (e.g. a mechanism group) to a binary STL and download it,
+// Serialise `object` (e.g. a mechanism group) to a binary STL DataView,
 // uniformly scaled by `scale`. The scale is applied and restored synchronously
-// (before the next render) so the on-screen model never visibly changes.
+// (before the next render) so the on-screen model never visibly changes. This
+// is the pure, DOM-free core of the export — unit-tested in test/export.test.js.
+export function stlBytes(object, scale = 1) {
+  if (scale === 1) return exporter.parse(object, { binary: true });
+
+  const original = object.scale.clone();
+  object.scale.multiplyScalar(scale);
+  object.updateMatrixWorld(true);
+  const data = exporter.parse(object, { binary: true });
+  object.scale.copy(original);
+  object.updateMatrixWorld(true);
+  return data;
+}
+
+// Serialise `object` to a binary STL and trigger a browser download.
 export function saveSTL(object, filename = 'gear3d.stl', scale = 1) {
   if (!object) return;
 
-  let data;
-  if (scale === 1) {
-    data = exporter.parse(object, { binary: true });
-  } else {
-    const original = object.scale.clone();
-    object.scale.multiplyScalar(scale);
-    object.updateMatrixWorld(true);
-    data = exporter.parse(object, { binary: true });
-    object.scale.copy(original);
-    object.updateMatrixWorld(true);
-  }
-
+  const data = stlBytes(object, scale);
   const blob = new Blob([data], { type: 'model/stl' }); // data is a DataView
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');

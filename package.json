@@ -3,18 +3,22 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "3D gear generator (spur trains, Geneva drives, double-Geneva oscillators) with middle-mouse orbit",
+  "description": "3D gear generator (spur/helical trains, Geneva & double-Geneva, internal/ring, planetary, and bevel gears) with middle-mouse orbit",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node --test"
+    "test": "node --test",
+    "lint": "eslint ."
   },
   "dependencies": {
     "lil-gui": "^0.19.2",
     "three": "^0.169.0"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.4.1",
+    "globals": "^17.6.0",
     "vite": "^5.4.10"
   }
 }
