@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
-import { gearGeometry, twistAboutZ } from '../src/gears/gear.js';
+import { gearGeometry, twistAboutZ, scaleConical, bevelGearGeometry } from '../src/gears/gear.js';
 import { gearMetrics } from '../src/gears/involute.js';
 
 const PARAMS = { module: 4, teeth: 16, pressureAngle: 20 };
@@ -91,4 +91,49 @@ test('helix=0 leaves the gear straight (front and back tip vertices share an ang
   const back = tipAngle(-1);
   assert.ok(front !== null && back !== null, 'found tip vertices on both caps');
   assert.ok(Math.abs(front - back) < 1e-6, `straight gear caps misaligned: ${front} vs ${back}`);
+});
+
+test('scaleConical scales (x,y) by z/zApex so radius is proportional to z', () => {
+  const zApex = 20;
+  const R = 6;
+  const zs = [5, 10, 20];
+  const arr = new Float32Array(zs.length * 3);
+  zs.forEach((z, i) => {
+    arr[i * 3] = R;
+    arr[i * 3 + 1] = 0;
+    arr[i * 3 + 2] = z;
+  });
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(arr, 3));
+  scaleConical(geo, zApex);
+  const pos = geo.attributes.position;
+  zs.forEach((z, i) => {
+    assert.ok(Math.abs(pos.getX(i) - R * (z / zApex)) < 1e-4, `x at z=${z}`);
+    assert.ok(Math.abs(pos.getY(i)) < 1e-4, `y at z=${z}`);
+  });
+});
+
+test('bevelGearGeometry tapers toward the apex (front end smaller than back by z ratio)', () => {
+  const geo = bevelGearGeometry({ module: 4, teeth: 20, pressureAngle: 20 }, { faceWidth: 14, coneAngle: Math.PI / 4, bore: 4 });
+  const pos = geo.attributes.position;
+  let zMin = Infinity;
+  let zMax = -Infinity;
+  for (let i = 0; i < pos.count; i++) {
+    zMin = Math.min(zMin, pos.getZ(i));
+    zMax = Math.max(zMax, pos.getZ(i));
+  }
+  const maxRadAt = (zTarget) => {
+    let maxR = 0;
+    for (let i = 0; i < pos.count; i++) {
+      if (Math.abs(pos.getZ(i) - zTarget) > 1e-3) continue;
+      maxR = Math.max(maxR, Math.hypot(pos.getX(i), pos.getY(i)));
+    }
+    return maxR;
+  };
+  const back = maxRadAt(zMax); // large end
+  const front = maxRadAt(zMin); // small end
+  assert.ok(back > 0 && front > 0, 'found both faces');
+  assert.ok(front < back, `front (${front}) should taper smaller than back (${back})`);
+  // conical: the radius ratio equals the axial (z) ratio
+  assert.ok(Math.abs(front / back - zMin / zMax) < 1e-3, `taper ratio ${front / back} != z ratio ${zMin / zMax}`);
 });

@@ -8,7 +8,7 @@ export function buildGUI(config, actions) {
   const gui = new GUI({ title: 'gear3d' });
 
   gui
-    .add(config, 'mode', ['Spur train', 'Geneva', 'Double Geneva', 'Internal gear', 'Planetary'])
+    .add(config, 'mode', ['Spur train', 'Geneva', 'Double Geneva', 'Internal gear', 'Planetary', 'Bevel'])
     .name('mechanism')
     .onChange(() => {
       refresh();
@@ -73,7 +73,15 @@ export function buildGUI(config, actions) {
   pl.add(config.planetary, 'pressureAngle', 14.5, 25, 0.5).name('pressure angle').onChange(actions.rebuild);
   pl.add(config.planetary, 'thickness', 2, 20, 0.5).onChange(actions.rebuild);
 
-  const folders = { 'Spur train': spur, Geneva: gen, 'Double Geneva': dbl, 'Internal gear': int, Planetary: pl };
+  // ----- Bevel -----
+  const bev = gui.addFolder('Bevel');
+  bev.add(config.bevel, 'pinionTeeth', 8, 40, 1).name('pinion teeth').onChange(actions.rebuild);
+  bev.add(config.bevel, 'gearTeeth', 8, 40, 1).name('gear teeth').onChange(actions.rebuild);
+  bev.add(config.bevel, 'module', 2, 12, 0.5).onChange(actions.rebuild);
+  bev.add(config.bevel, 'pressureAngle', 14.5, 25, 0.5).name('pressure angle').onChange(actions.rebuild);
+  bev.add(config.bevel, 'faceWidth', 4, 30, 1).name('face width').onChange(actions.rebuild);
+
+  const folders = { 'Spur train': spur, Geneva: gen, 'Double Geneva': dbl, 'Internal gear': int, Planetary: pl, Bevel: bev };
 
   function refreshTeeth() {
     teethCtrls.forEach((c, i) => c.show(i < config.spur.gears));

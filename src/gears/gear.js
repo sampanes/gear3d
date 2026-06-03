@@ -102,3 +102,50 @@ export function makeRingGear(params, color, opts = {}) {
   pivot.userData.metrics = internalGearMetrics(params);
   return pivot;
 }
+
+// Deform a prism into a cone frustum about the Z axis: scale each vertex's (x,y)
+// by z/zApex, so a vertex in the apex plane (z = zApex) keeps full size and the
+// apex (z = 0) collapses to a point. Radius becomes proportional to z.
+export function scaleConical(geo, zApex) {
+  const pos = geo.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    const s = pos.getZ(i) / zApex;
+    pos.setXY(i, pos.getX(i) * s, pos.getY(i) * s);
+  }
+  pos.needsUpdate = true;
+}
+
+// A bevel gear: an involute gear extruded then deformed onto a pitch cone of
+// half-angle `coneAngle` (Tredgold approximation — the spur profile scaled
+// self-similarly toward the apex). The apex sits at the local origin and the
+// gear tapers toward it; the large (back) face faces +Z. Returns a
+// BufferGeometry, axis +Z.
+export function bevelGearGeometry(params, { faceWidth = 10, coneAngle = Math.PI / 4, bore = 0 } = {}) {
+  const { r } = gearMetrics(params);
+  const D = r / Math.sin(coneAngle); // slant cone distance to the back pitch circle
+  const b = Math.min(faceWidth, 0.45 * D); // slant face width
+  const axial = b * Math.cos(coneAngle); // axial length of the frustum
+  const zBack = D * Math.cos(coneAngle); // axial apex(origin) -> back face
+
+  const shape = new THREE.Shape(gearContour(params));
+  if (bore > 0) {
+    const hole = new THREE.Path();
+    hole.absarc(0, 0, bore, 0, TAU, true);
+    shape.holes.push(hole);
+  }
+  const geo = new THREE.ExtrudeGeometry(shape, { depth: axial, bevelEnabled: false, steps: 1, curveSegments: 24 });
+  geo.translate(0, 0, zBack - axial); // front face -> zBack-axial, back face -> zBack
+  scaleConical(geo, zBack); // taper to the apex at the origin
+  geo.computeVertexNormals();
+  return geo;
+}
+
+// A bevel-gear mesh wrapped in a pivot Object3D (rotate `.rotation.z` to spin).
+export function makeBevelGear(params, color, opts = {}) {
+  const pivot = new THREE.Object3D();
+  const mesh = new THREE.Mesh(bevelGearGeometry(params, opts), metal(color, opts.material));
+  mesh.castShadow = mesh.receiveShadow = true;
+  pivot.add(mesh);
+  pivot.userData.metrics = gearMetrics(params);
+  return pivot;
+}

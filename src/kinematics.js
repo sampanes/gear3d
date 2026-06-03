@@ -188,3 +188,15 @@ export function planetaryAngles(theta, zSun, zPlanet, fixed = 'ring') {
 export function planetaryAssembly(zSun, zRing, nPlanets) {
   return (zSun + zRing) / nPlanets;
 }
+
+// ---------------------------------------------------------------------------
+// Bevel gear pair (intersecting shafts)
+// ---------------------------------------------------------------------------
+// Two gears on shafts that meet at angle `shaft` (default 90 deg). Each gear's
+// pitch cone half-angle satisfies tan(gammaA) = sin(shaft)/(zB/zA + cos(shaft)),
+// and gammaA + gammaB = shaft. The speed ratio is the usual omega_B/omega_A =
+// zA/zB (the gears counter-rotate about their own axes).
+export function bevelConeAngles(zA, zB, shaft = Math.PI / 2) {
+  const gammaA = Math.atan2(Math.sin(shaft), zB / zA + Math.cos(shaft));
+  return { gammaA, gammaB: shaft - gammaA, ratio: zA / zB };
+}

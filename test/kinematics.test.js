@@ -14,6 +14,7 @@ import {
   internalGearRatio,
   planetaryAngles,
   planetaryAssembly,
+  bevelConeAngles,
 } from '../src/kinematics.js';
 
 const near = (a, b, eps = 1e-9, msg = '') => assert.ok(Math.abs(a - b) <= eps, `${msg} ${a} !~= ${b}`);
@@ -252,4 +253,21 @@ test('planetaryAssembly: integer exactly when planets are equally spaceable', ()
   assert.ok(Number.isInteger(planetaryAssembly(12, 36, 3))); // 48/3 = 16
   assert.ok(Number.isInteger(planetaryAssembly(12, 36, 4))); // 48/4 = 12
   assert.ok(!Number.isInteger(planetaryAssembly(12, 36, 5))); // 48/5
+});
+
+// ---------------------------------------------------------------------------
+// Bevel pair
+// ---------------------------------------------------------------------------
+test('bevelConeAngles: half-angles sum to the shaft angle; ratio = zA/zB', () => {
+  // miter pair (equal teeth) -> 45 + 45
+  const mit = bevelConeAngles(20, 20, Math.PI / 2);
+  near(mit.gammaA, Math.PI / 4);
+  near(mit.gammaB, Math.PI / 4);
+  near(mit.ratio, 1);
+  // unequal pair on a 90-degree shaft
+  const b = bevelConeAngles(16, 24, Math.PI / 2);
+  near(b.gammaA + b.gammaB, Math.PI / 2, 1e-9, 'cone half-angles sum to shaft angle');
+  near(Math.tan(b.gammaA), 16 / 24, 1e-9, 'tan(gammaA) = zA/zB at 90 deg');
+  near(b.ratio, 16 / 24);
+  assert.ok(b.gammaA < b.gammaB, 'the smaller gear has the smaller cone angle');
 });
