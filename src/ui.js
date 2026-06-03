@@ -54,7 +54,6 @@ export function buildGUI(config, actions, modeNames) {
   // ----- Double Geneva -----
   const dbl = gui.addFolder('Double Geneva');
   dbl.add(config.double, 'amplitude', 10, 80, 1).name('swing ±°').onChange(actions.rebuild);
-  dbl.add(config.double, 'pushFrac', 0.3, 1, 0.01).name('push fraction').onChange(actions.rebuild);
   dbl.add(config.double, 'size', 50, 200, 1).onChange(actions.rebuild);
 
   // ----- Internal gear -----

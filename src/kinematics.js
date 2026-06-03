@@ -99,6 +99,43 @@ export function doubleGenevaPinOffset(pushFrac = 0.62) {
   return Math.PI / 2 - w / 2;
 }
 
+// True slotted-rocker geometry (the faithful Double Geneva). Two counter-rotating
+// wheels each carry a crank pin at orbit radius a about the common centre O; an
+// output rocker pivots at P = (0, H) directly above O with one radial slot. A
+// pin enters the slot near the top of its orbit and, sliding within it, swings
+// the rocker; half a turn later the OTHER pin (on the counter-rotating wheel)
+// sweeps it back — a genuine pin-in-slot drive, not a scripted angle.
+//
+// The engagement IS a Geneva engagement: the rocker angle equals the heading
+// from P to the pin, atan2(-a*sin x, H - a*cos x) = atan2(-s*sin x, 1 - s*cos x)
+// with s = a/H and x the pin's deviation from top — the same form as
+// genevaStarAngle. Choosing a/H = sin(amp) makes the rocker reach exactly ±amp
+// with zero velocity at the slot exit (soft entry/exit), so the dwell fraction
+// (= 2*amp/PI) follows from the amplitude rather than being a free knob.
+//
+// pin 1 (front wheel, CCW) crests at theta = PI/2, sweeping the rocker +amp->-amp;
+// pin 2 (back wheel, CW) crests at theta = 3*PI/2, sweeping it -amp->+amp.
+// Returns { angle, engaged, pin } with pin 1, 2, or 0 (dwell).
+export function doubleGenevaRocker(theta, amp) {
+  const s = Math.sin(amp); // a / H, the crank ratio
+  const gammaP = Math.PI / 2 - amp; // engagement half-window (the slot is filled)
+  const ph = mod(theta, TAU);
+  const x1 = ph - Math.PI / 2; // pin 1 deviation from the top of its orbit
+  const x2 = ph - (3 * Math.PI) / 2; // pin 2 deviation from the top of its orbit
+
+  if (Math.abs(x1) <= gammaP) {
+    return { angle: Math.atan2(-s * Math.sin(x1), 1 - s * Math.cos(x1)), engaged: true, pin: 1 };
+  }
+  if (Math.abs(x2) <= gammaP) {
+    return { angle: Math.atan2(s * Math.sin(x2), 1 - s * Math.cos(x2)), engaged: true, pin: 2 };
+  }
+  // dwell, held at the extreme last reached: -amp between the two pushes, +amp around the wrap
+  if (ph > Math.PI / 2 + gammaP && ph < (3 * Math.PI) / 2 - gammaP) {
+    return { angle: -amp, engaged: false, pin: 0 };
+  }
+  return { angle: amp, engaged: false, pin: 0 };
+}
+
 // ---------------------------------------------------------------------------
 // Spur gear train
 // ---------------------------------------------------------------------------

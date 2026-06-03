@@ -19,8 +19,7 @@ import {
   spurTrainPhases,
   spurGearAngle,
   genevaStarAngle,
-  doubleGenevaOutput,
-  doubleGenevaPinOffset,
+  doubleGenevaRocker,
   internalGearRatio,
   planetaryAngles,
   bevelConeAngles,
@@ -33,7 +32,7 @@ const near = (a, b, eps = 1e-12, msg = '') => assert.ok(Math.abs(a - b) <= eps, 
 const CONFIG = {
   spur: { teeth: [12, 24, 18], module: 5, pressureAngle: 20, thickness: 8, helix: 0 },
   geneva: { slots: 4, centerDistance: 100 },
-  double: { amplitude: 35, pushFrac: 0.62, size: 100 },
+  double: { amplitude: 35, size: 100 },
   internal: { module: 4, pinionTeeth: 12, ringTeeth: 48, pressureAngle: 20, thickness: 8 },
   planetary: { module: 4, sunTeeth: 12, planetTeeth: 12, planets: 3, pressureAngle: 20, thickness: 8, fixed: 'ring' },
   bevel: { module: 4, pinionTeeth: 16, gearTeeth: 24, pressureAngle: 20, faceWidth: 14 },
@@ -125,15 +124,30 @@ test('Geneva.update drives the star by genevaStarAngle() and mirrors engaged', (
   }
 });
 
-test('DoubleGeneva.update toggles the lever via doubleGenevaOutput() and offsets the wheels', () => {
+test('DoubleGeneva.update rocks the slotted output via doubleGenevaRocker and counter-rotates the wheels', () => {
   const m = new DoubleGeneva(CONFIG.double);
-  const amp = CONFIG.double.amplitude * DEG;
-  const off = doubleGenevaPinOffset(CONFIG.double.pushFrac);
+  const amp = Math.min(CONFIG.double.amplitude * DEG, 1.5);
   for (const theta of THETAS) {
     m.update(theta);
-    const o = doubleGenevaOutput(theta, amp, CONFIG.double.pushFrac);
-    near(m.lever.rotation.z, o.angle, 1e-12, `lever @${theta}`);
-    near(m.wheels.rotation.z, theta + off, 1e-12, `wheels @${theta}`);
+    const r = doubleGenevaRocker(theta, amp);
+    near(m.rocker.rotation.z, r.angle, 1e-12, `rocker @${theta}`);
+    near(m.front.rotation.z, theta, 1e-12, `front wheel (CCW) @${theta}`);
+    near(m.back.rotation.z, -theta, 1e-12, `back wheel (CW) @${theta}`);
+  }
+});
+
+test('DoubleGeneva: the engaged pin truly rides on the rocker slot centerline (real slot)', () => {
+  const m = new DoubleGeneva(CONFIG.double);
+  const amp = Math.min(CONFIG.double.amplitude * DEG, 1.5);
+  for (let i = 0; i <= 200; i++) {
+    const theta = (i / 200) * TAU;
+    m.update(theta);
+    const r = doubleGenevaRocker(theta, amp);
+    if (!r.engaged) continue;
+    const px = m.a * Math.cos(theta); // both pins share x = a·cos(theta)
+    const py = m.a * (r.pin === 1 ? Math.sin(theta) : -Math.sin(theta));
+    const lx = px * Math.cos(r.angle) + (py - m.H) * Math.sin(r.angle); // rocker-local x; slot runs along -y'
+    assert.ok(Math.abs(lx) < 1e-9, `theta=${theta.toFixed(3)} pin ${r.pin} off slot centerline by ${lx}`);
   }
 });
 

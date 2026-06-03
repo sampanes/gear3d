@@ -9,6 +9,7 @@ import {
   genevaStarAngle,
   doubleGenevaOutput,
   doubleGenevaPinOffset,
+  doubleGenevaRocker,
   spurTrainPhases,
   spurGearAngle,
   internalGearRatio,
@@ -162,6 +163,56 @@ test('double-Geneva: pin offset puts the pin at the top of orbit (PI/2) mid-push
   near(off, Math.PI / 2 - w / 2);
   // wheel angle = driverTheta + offset; at the middle of push A (theta=w/2) -> PI/2
   near((w / 2) + off, Math.PI / 2, 1e-12, 'pin crests at push midpoint');
+});
+
+test('doubleGenevaRocker: geometric pin-in-slot drive toggles ±amp through 0 at each pin crest', () => {
+  const amp = 0.6;
+  const gp = Math.PI / 2 - amp;
+  const R = (t) => doubleGenevaRocker(t, amp);
+  near(R(Math.PI / 2 - gp).angle, amp, 1e-9, 'push 1 start = +amp');
+  near(R(Math.PI / 2).angle, 0, 1e-9, 'push 1 mid (pin 1 at top) = 0');
+  near(R(Math.PI / 2 + gp).angle, -amp, 1e-9, 'push 1 end = -amp');
+  near(R((3 * Math.PI) / 2 - gp).angle, -amp, 1e-9, 'push 2 start = -amp');
+  near(R((3 * Math.PI) / 2).angle, 0, 1e-9, 'push 2 mid (pin 2 at top) = 0');
+  near(R((3 * Math.PI) / 2 + gp).angle, amp, 1e-9, 'push 2 end = +amp');
+  near(R(Math.PI).angle, -amp, 1e-9, 'dwell at -amp between pushes');
+  near(R(0).angle, amp, 1e-9, 'dwell at +amp around the wrap');
+  assert.equal(R(Math.PI / 2).pin, 1, 'pin 1 drives push 1');
+  assert.equal(R((3 * Math.PI) / 2).pin, 2, 'pin 2 drives push 2');
+  assert.equal(R(Math.PI).engaged, false, 'dwell is disengaged');
+});
+
+test('doubleGenevaRocker: continuous everywhere and eases into each dwell with ~zero velocity', () => {
+  const amp = 0.5;
+  const gp = Math.PI / 2 - amp;
+  const at = (t) => doubleGenevaRocker(t, amp).angle;
+  const eps = 1e-7;
+  near(at(Math.PI / 2 + gp - eps), at(Math.PI / 2 + gp + eps), 1e-5, 'push 1 end');
+  near(at((3 * Math.PI) / 2 - gp - eps), at((3 * Math.PI) / 2 - gp + eps), 1e-5, 'push 2 start');
+  near(at((3 * Math.PI) / 2 + gp - eps), at((3 * Math.PI) / 2 + gp + eps), 1e-5, 'push 2 end');
+  near(at(TAU - eps), at(eps), 1e-5, 'wrap');
+  const h = 1e-5;
+  const v = (at(Math.PI / 2 + gp) - at(Math.PI / 2 + gp - h)) / h; // velocity into the -amp dwell
+  assert.ok(Math.abs(v) < 1e-2, `velocity into dwell ${v} not ~0 (soft Geneva exit)`);
+});
+
+test('doubleGenevaRocker: the engaged pin rides exactly on the slot centerline (true slot)', () => {
+  // pivot P=(0,H) above the orbit; a/H = sin(amp). The rocker tracks the pin, so
+  // transformed into the rocker frame the pin must lie on the slot axis (x'=0).
+  const amp = 0.7;
+  const H = 1;
+  const a = Math.sin(amp); // a/H = sin(amp)
+  for (let i = 0; i <= 240; i++) {
+    const theta = (i / 240) * TAU;
+    const r = doubleGenevaRocker(theta, amp);
+    if (!r.engaged) continue;
+    const px = a * Math.cos(theta); // both pins share x = a cos(theta)
+    const py = a * (r.pin === 1 ? Math.sin(theta) : -Math.sin(theta));
+    const dx = px;
+    const dy = py - H;
+    const lx = dx * Math.cos(r.angle) + dy * Math.sin(r.angle); // rocker-local x (slot runs along -y')
+    assert.ok(Math.abs(lx) < 1e-9, `theta=${theta.toFixed(3)} pin ${r.pin} off centerline by ${lx}`);
+  }
 });
 
 // ---------------------------------------------------------------------------

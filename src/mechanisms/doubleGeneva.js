@@ -1,89 +1,118 @@
-// Double-Geneva oscillator: two coaxial wheels are joined and turn together,
-// each carrying one pin 180 degrees from the other. A single lever pivoted
-// above the central joint is driven to +amp by wheel 1's pin, then half a turn
-// later back to -amp by wheel 2's pin — toggling back and forth in place with a
-// short dwell at each extreme.
+// Double-Geneva oscillator (true slotted-rocker drive). Two coaxial wheels
+// counter-rotate; each carries one crank pin at orbit radius `a`. An output
+// rocker pivots above the axle at P = (0, H) and has a single radial slot. As a
+// pin reaches the top of its orbit it enters the slot and, sliding within it,
+// swings the rocker; half a turn later the other pin (on the counter-rotating
+// wheel) sweeps it back — a genuine pin-in-slot drive. The rocker angle is the
+// geometric heading from P to the engaged pin (kinematics.doubleGenevaRocker),
+// and a/H = sin(amp) makes it reach exactly ±amp with a soft (zero-velocity)
+// Geneva exit, so the dwell is geometric, not scripted.
 
 import * as THREE from 'three';
 import { DEG } from '../math.js';
-import { doubleGenevaOutput, doubleGenevaPinOffset } from '../kinematics.js';
+import { doubleGenevaRocker } from '../kinematics.js';
 import { PALETTE, metal, disc, pin, disposeObject } from '../parts.js';
 
-function box(w, h, d, color, opts) {
-  return new THREE.Mesh(new THREE.BoxGeometry(w, h, d), metal(color, opts));
+// A flat bar (pivot at the local origin) with a radial slot cut open at its
+// outer/bottom end, extruded along z and centred on the slot plane.
+function rockerGeometry(wBar, wSlot, yTop, yBot, slotInner, thk) {
+  const s = new THREE.Shape();
+  s.moveTo(-wBar / 2, yTop);
+  s.lineTo(-wBar / 2, yBot);
+  s.lineTo(-wSlot / 2, yBot); // bottom, left of the slot mouth
+  s.lineTo(-wSlot / 2, -slotInner); // up the left slot wall to the closed inner end
+  s.lineTo(wSlot / 2, -slotInner); // across the inner end
+  s.lineTo(wSlot / 2, yBot); // down the right slot wall
+  s.lineTo(wBar / 2, yBot); // bottom, right of the slot mouth
+  s.lineTo(wBar / 2, yTop);
+  s.closePath();
+  const bevel = Math.min(0.5, thk * 0.1);
+  const geo = new THREE.ExtrudeGeometry(s, {
+    depth: thk - 2 * bevel,
+    bevelEnabled: true,
+    bevelThickness: bevel,
+    bevelSize: bevel,
+    bevelSegments: 1,
+    steps: 1,
+    curveSegments: 4,
+  });
+  geo.translate(0, 0, -thk / 2 + bevel);
+  geo.computeVertexNormals();
+  return geo;
 }
 
 export class DoubleGeneva {
   constructor(p) {
     this.group = new THREE.Group();
-    this.amp = p.amplitude * DEG;
-    this.pushFrac = p.pushFrac;
-    this.off = doubleGenevaPinOffset(p.pushFrac);
-
+    this.amp = Math.min(p.amplitude * DEG, 1.5); // half-swing; < PI/2 so the slot window is valid
     const c = p.size;
-    const a = c * 0.5; // pin orbit radius
-    this.a = a;
-    const wheelR = c * 0.62;
-    const wheelThk = c * 0.12;
-    const pinR = c * 0.05;
-    const d = wheelThk * 0.5 + c * 0.06; // half the gap between the two wheels
 
-    // central axle / joint spanning both wheels
-    const axle = disc(c * 0.1, 2 * d + 2 * wheelThk, PALETTE.shaft, { metalness: 0.85, rough: 0.25 });
-    this.group.add(axle);
+    const a = (this.a = c * 0.4); // pin orbit radius
+    const H = (this.H = a / Math.sin(this.amp)); // pivot height so a/H = sin(amp)
+    const gammaP = Math.PI / 2 - this.amp;
+    const dmin = H - a; // closest pin approach to the pivot (pin at top)
+    const dmax = Math.hypot(a * Math.sin(gammaP), H - a * Math.cos(gammaP)); // at the slot mouth
 
-    // --- two joined wheels (same rotation); pins mounted 180° apart ---
-    this.wheels = new THREE.Object3D();
-    const w1 = disc(wheelR, wheelThk, PALETTE.driver);
-    w1.position.z = d + wheelThk / 2;
-    const w2 = disc(wheelR, wheelThk, PALETTE.driver);
-    w2.position.z = -(d + wheelThk / 2);
-    this.wheels.add(w1, w2);
+    const pinR = c * 0.045;
+    const wheelR = a * 1.18;
+    const wheelThk = c * 0.09;
+    const zGap = wheelThk / 2 + c * 0.06; // each wheel's offset from the rocker plane
+    const rockerThk = c * 0.1;
 
-    // pin 1 on the front wheel reaches in toward the lever plane (z≈0);
-    // pin 2 on the back wheel, at local angle 180°, reaches in from the back.
-    const tip = c * 0.05;
-    this.wheels.add(pin(a, 0, pinR, d + wheelThk / 2 - tip, tip)); // +x pin, front
-    this.wheels.add(pin(-a, 0, pinR, d + wheelThk / 2 - tip, -(d + wheelThk / 2))); // -x pin, back
-    this.group.add(this.wheels);
+    // central axle through both wheels
+    this.group.add(disc(c * 0.05, 2 * zGap + wheelThk, PALETTE.shaft, { metalness: 0.85, rough: 0.25 }));
 
-    // --- output lever, pivoted above the joint ---
-    const H = a * 1.55; // pivot height above the axis
-    const reach = a * 0.78; // tab sits where the pins crest their orbit
-    const L = H - reach;
-    this.lever = new THREE.Object3D();
-    this.lever.position.set(0, H, 0);
+    // --- two coaxial wheels that counter-rotate, each with one pin ---
+    const wheelPinLen = zGap + wheelThk / 2 + rockerThk * 0.3;
+    this.front = new THREE.Object3D();
+    const fDisc = disc(wheelR, wheelThk, PALETTE.driver);
+    fDisc.position.z = zGap;
+    this.front.add(fDisc, pin(a, 0, pinR, wheelPinLen, -rockerThk * 0.3));
+    this.group.add(this.front);
 
-    const blade = box(c * 0.05, L, c * 0.16, PALETTE.output);
-    blade.position.y = -L / 2;
-    const tab = box(c * 0.26, c * 0.12, c * 0.2, PALETTE.output);
-    tab.position.y = -L;
-    const counter = box(c * 0.16, c * 0.16, c * 0.12, PALETTE.output, { rough: 0.5 });
-    counter.position.y = c * 0.12;
-    const hub = disc(c * 0.07, c * 0.22, PALETTE.shaft, { metalness: 0.85, rough: 0.3 });
-    this.lever.add(blade, tab, counter, hub);
-    this.group.add(this.lever);
+    this.back = new THREE.Object3D();
+    const bDisc = disc(wheelR, wheelThk, PALETTE.driven);
+    bDisc.position.z = -zGap;
+    this.back.add(bDisc, pin(a, 0, pinR, wheelPinLen, -(zGap + wheelThk / 2)));
+    this.group.add(this.back);
 
-    // pivot post (static) behind the lever
+    // --- slotted output rocker, pivoted at (0, H) ---
+    const wSlot = 2 * pinR + c * 0.02;
+    const wBar = wSlot + c * 0.12;
+    const slotInner = dmin * 0.78; // closed inner end, just inside the pin's closest approach
+    const yTop = c * 0.1; // small counterweight nub above the pivot
+    const yBot = -(dmax + c * 0.06); // open slot mouth, just past the pin's farthest reach
+    this.rocker = new THREE.Object3D();
+    this.rocker.position.set(0, H, 0);
+    const bar = new THREE.Mesh(rockerGeometry(wBar, wSlot, yTop, yBot, slotInner, rockerThk), metal(PALETTE.output));
+    bar.castShadow = bar.receiveShadow = true;
+    this.rocker.add(bar, disc(c * 0.06, c * 0.24, PALETTE.shaft, { metalness: 0.85, rough: 0.3 }));
+    this.group.add(this.rocker);
+
+    // static pivot post behind the rocker
     const post = disc(c * 0.05, c * 0.4, PALETTE.lock, { rough: 0.6, metalness: 0.3 });
-    post.position.set(0, H, -c * 0.18);
+    post.position.set(0, H, -c * 0.2);
     this.group.add(post);
 
-    this.active = 0;
+    this.engaged = false;
+    this.activePin = 0;
   }
 
   update(theta) {
-    this.wheels.rotation.z = theta + this.off;
-    const o = doubleGenevaOutput(theta, this.amp, this.pushFrac);
-    this.lever.rotation.z = o.angle;
-    this.active = o.active;
+    this.front.rotation.z = theta; // CCW
+    this.back.rotation.z = -theta; // CW (counter-rotating)
+    const r = doubleGenevaRocker(theta, this.amp);
+    this.rocker.rotation.z = r.angle;
+    this.engaged = r.engaged;
+    this.activePin = r.pin;
   }
 
   info() {
-    const swing = (this.amp / DEG * 2).toFixed(0);
-    const state =
-      this.active === 1 ? 'wheel 1 → driving' : this.active === 2 ? 'wheel 2 ← driving' : 'dwell';
-    return `double Geneva oscillator\nswing   ±${(this.amp / DEG).toFixed(0)}°  (${swing}° total)\ndwell   ${(100 - this.pushFrac * 100).toFixed(0)}% each end\nstate   ${state}`;
+    const dwell = ((2 * this.amp) / Math.PI) * 100;
+    const state = this.engaged
+      ? `pin ${this.activePin} → driving`
+      : 'dwell (held)';
+    return `double Geneva oscillator\nswing   ±${(this.amp / DEG).toFixed(0)}°  (${(2 * this.amp / DEG).toFixed(0)}° total)\ndwell   ${dwell.toFixed(0)}% each end (geometric)\nstate   ${state}`;
   }
 
   dispose() {

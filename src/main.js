@@ -25,7 +25,7 @@ const config = {
   overlays: false, // pitch + base circles
   spur: { gears: 3, t1: 12, t2: 24, t3: 18, t4: 15, t5: 30, module: 5, pressureAngle: 20, thickness: 8, helix: 0 },
   geneva: { slots: 4, centerDistance: 100 },
-  double: { amplitude: 35, pushFrac: 0.62, size: 100 },
+  double: { amplitude: 35, size: 100 },
   internal: { module: 4, pinionTeeth: 12, ringTeeth: 48, pressureAngle: 20, thickness: 8 },
   planetary: { module: 4, sunTeeth: 12, planetTeeth: 12, planets: 3, pressureAngle: 20, thickness: 8, fixed: 'ring' },
   bevel: { module: 4, pinionTeeth: 16, gearTeeth: 24, pressureAngle: 20, faceWidth: 14 },
