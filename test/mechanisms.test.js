@@ -358,7 +358,7 @@ test('SatorSquare: a geared shared drive is rendered per flip corner O-pair', ()
   for (const phi of [0, 0.8, Math.PI, 4.2]) {
     m.update(phi);
     near(m.drives[0].star.rotation.z, satorFlipStar(phi), 1e-12, `star rocks @${phi}`);
-    near(m.drives[0].front.rotation.z, 2 * phi, 1e-12, `front driver @${phi}`);
+    near(m.drives[0].gears[0].rotation.z, 3 * phi, 1e-12, `meshed driver gear @${phi}`);
   }
   // a pair with a non-flip O gets no shared drive
   const cells = defaultCells();

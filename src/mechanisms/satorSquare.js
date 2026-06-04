@@ -12,7 +12,7 @@
 import * as THREE from 'three';
 import { satorTileAngle, indexUpright, satorFlipStar } from '../kinematics.js';
 import { makeGear } from '../gears/gear.js';
-import { rockerGeometry } from './doubleGeneva.js';
+import { TAU } from '../math.js';
 import { PALETTE, metal, disc, pin, disposeObject } from '../parts.js';
 
 export const SATOR_WORD = ['SATOR', 'AREPO', 'TENET', 'OPERA', 'ROTAS'];
@@ -127,17 +127,52 @@ function letterGroup(ch, size, depth, z) {
 // exactly in sync with the tiles); the shaft stands in for the cross-board
 // transmission rather than a full gear train. `gi` offsets each pair's drive to
 // its own z-plane behind the board so two diagonals don't collide.
-// One shared, faithful double-Geneva drive for a corner O-pair. Two coaxial
-// counter-rotating wheels (one crank pin each) engage a slotted "star" rocker
-// (the Maltese) that carries a coaxial output gear; the star rocks ±22.5°, and
-// the output gear meshes a 2:1 gear on each O tile, turning both O's 0..90° in
-// sync. Pin-in-slot engagement reuses the verified doubleGenevaRocker geometry.
+// A simple n-slot Maltese star: a slotted disc (slots open at the rim), extruded.
+function malteseStarGeo(R, slotW, slotDepth, n, thk) {
+  const pitch = TAU / n;
+  const dphi = Math.asin(Math.min(0.95, slotW / R));
+  const tMouth = Math.sqrt(Math.max(0, R * R - slotW * slotW));
+  const bottom = R - slotDepth;
+  const pts = [];
+  for (let i = 0; i < n; i++) {
+    const phi = i * pitch;
+    const ux = Math.cos(phi);
+    const uy = Math.sin(phi);
+    const vx = -Math.sin(phi);
+    const vy = Math.cos(phi);
+    pts.push(new THREE.Vector2(ux * tMouth - vx * slotW, uy * tMouth - vy * slotW)); // dive in
+    pts.push(new THREE.Vector2(ux * bottom - vx * slotW, uy * bottom - vy * slotW));
+    pts.push(new THREE.Vector2(ux * bottom + vx * slotW, uy * bottom + vy * slotW)); // across the bottom
+    pts.push(new THREE.Vector2(ux * tMouth + vx * slotW, uy * tMouth + vy * slotW)); // climb out
+    const aExit = phi + dphi;
+    const aNext = phi + pitch - dphi;
+    for (let k = 1; k <= 8; k++) {
+      const a = aExit + (aNext - aExit) * (k / 8); // rim arc to the next slot
+      pts.push(new THREE.Vector2(R * Math.cos(a), R * Math.sin(a)));
+    }
+  }
+  const shape = new THREE.Shape(pts);
+  const hole = new THREE.Path();
+  hole.absarc(0, 0, R * 0.16, 0, TAU, true);
+  shape.holes.push(hole);
+  const geo = new THREE.ExtrudeGeometry(shape, { depth: thk, bevelEnabled: false, curveSegments: 6 });
+  geo.translate(0, 0, -thk / 2);
+  geo.computeVertexNormals();
+  return geo;
+}
+
+// One shared drive for a corner O-pair, in the topology you sketched: TWO MESHED
+// driver gears (counter-rotating, one crank pin each) below a MALTESE STAR that
+// the pins strike to rock it ±22.5°. The star carries a coaxial output gear that
+// meshes a 2:1 gear on each O tile, turning both O's 0..90° in sync. (The star is
+// driven from satorFlipStar so the O-flip stays exact; the pin-in-slot timing is
+// visually aligned — the exact two-offset-driver Geneva engagement is a refine.)
 function buildGearedDrive(p1, p2, oPivots, cell, thickness, gi) {
   const g = new THREE.Group();
   const mid = p1.clone().add(p2).multiplyScalar(0.5);
   const d = Math.max(p1.distanceTo(mid), 1);
   const Zo = 12;
-  const Zs = 24; // 2:1 step-up (star gear : O gear)
+  const Zs = 24; // 2:1 step-up (output gear : O gear)
   const m = (2 * d) / (Zs + Zo); // module so the pitch circles meet at distance d
   const pa = 20;
   const gt = thickness * 0.5;
@@ -150,50 +185,38 @@ function buildGearedDrive(p1, p2, oPivots, cell, thickness, gi) {
     piv.add(og);
   }
 
-  // the slotted-star double-Geneva (a/H = sin(amp), amp = 22.5°), matching satorFlipStar
-  const amp = Math.PI / 8;
-  const a = cell * 0.26; // pin orbit radius
-  const H = a / Math.sin(amp); // the star pivot (output-gear axis) sits H above the wheels
-  const gammaP = Math.PI / 2 - amp;
-  const dmin = H - a;
-  const dmax = Math.hypot(a * Math.sin(gammaP), H - a * Math.cos(gammaP));
-  const pinR = a * 0.13;
-  const wSlot = 2 * pinR + cell * 0.02;
-  const wBar = wSlot + cell * 0.07;
-  const rThk = thickness * 0.4;
-  const wheelR = a * 1.12;
-  const wThk = thickness * 0.38;
-
   g.position.set(mid.x, mid.y, zBack);
-  g.rotation.z = Math.atan2(-mid.y, -mid.x) + Math.PI / 2; // tuck the wheels toward the centre
+  g.rotation.z = Math.atan2(-mid.y, -mid.x) + Math.PI / 2; // "down" points toward the board centre
 
-  // star = output gear + slotted rocker (coaxial at the local origin), rocks ±amp
+  // star = output gear (meshes the O gears) + a coaxial Maltese star the pins strike
+  const Rs = (m * Zs) / 2;
+  const Rm = Rs * 0.66; // Maltese star radius
   const star = new THREE.Object3D();
   const outGear = makeGear({ module: m, teeth: Zs, pressureAngle: pa }, PALETTE.driver, { thickness: gt });
-  const rockerMesh = new THREE.Mesh(
-    rockerGeometry(wBar, wSlot, cell * 0.06, -(dmax + cell * 0.05), dmin * 0.78, rThk),
-    metal(PALETTE.output)
-  );
-  rockerMesh.position.z = -gt * 0.5 - rThk * 0.5;
-  rockerMesh.castShadow = true;
-  star.add(outGear, rockerMesh);
+  const malt = new THREE.Mesh(malteseStarGeo(Rm, Rm * 0.16, Rm * 0.4, 6, gt * 0.9), metal(PALETTE.output));
+  malt.position.z = -gt; // just behind the output gear
+  malt.castShadow = true;
+  star.add(outGear, malt);
   g.add(star);
 
-  // two coaxial counter-rotating driver wheels at (0,-H), one crank pin each
-  const zWheel = -gt * 0.5 - rThk - wThk * 0.5;
-  const front = new THREE.Object3D();
-  front.position.set(0, -H, 0);
-  const fd = disc(wheelR, wThk, PALETTE.driver);
-  fd.position.z = zWheel;
-  front.add(fd, pin(a, 0, pinR, rThk + wThk, zWheel)); // pin reaches forward into the slot
-  const back = new THREE.Object3D();
-  back.position.set(0, -H, 0);
-  const bd = disc(wheelR, wThk, PALETTE.driven);
-  bd.position.z = zWheel - wThk * 1.3;
-  back.add(bd, pin(a, 0, pinR, rThk + wThk, zWheel - wThk * 1.3));
-  g.add(front, back);
+  // two MESHED driver gears below the star, counter-rotating, each with a crank pin
+  const Zd = 10;
+  const rd = (m * Zd) / 2; // driver pitch radius (centres 2*rd apart -> meshed)
+  const cy = -(Rm + rd * 0.9); // gear centres below the star; pins reach up toward it
+  const ap = rd * 0.7; // crank pin orbit
+  const dz = -gt - gt * 0.9 - thickness * 0.16; // driver plane, behind the Maltese star
+  const gears = [];
+  for (const s of [1, -1]) {
+    const gw = new THREE.Object3D();
+    gw.position.set(s * rd, cy, 0);
+    const gear = makeGear({ module: m, teeth: Zd, pressureAngle: pa }, s > 0 ? PALETTE.driver : PALETTE.driven, { thickness: gt });
+    gear.position.z = dz;
+    gw.add(gear, pin(0, ap, cell * 0.035, gt + thickness * 0.18, dz)); // pin reaches forward toward the star
+    g.add(gw);
+    gears.push(gw);
+  }
 
-  return { group: g, star, front, back };
+  return { group: g, star, gears };
 }
 
 export class SatorSquare {
@@ -293,12 +316,11 @@ export class SatorSquare {
       t.letterPivot.rotation.z = psi;
     }
     if (this.drives.length) {
-      const s = satorFlipStar(phi); // slotted star rocks ±22.5°, dwelling at the detents
-      const w = 2 * phi; // driver wheel angle (the theta that satorFlipStar feeds doubleGenevaRocker)
+      const s = satorFlipStar(phi); // Maltese star rocks ±22.5°, dwelling at the detents
       for (const d of this.drives) {
         d.star.rotation.z = s;
-        d.front.rotation.z = w; // counter-rotating pins genuinely engage the star slot
-        d.back.rotation.z = -w;
+        d.gears[0].rotation.z = 3 * phi; // meshed driver gears counter-rotate; pins strike the star
+        d.gears[1].rotation.z = -3 * phi;
       }
     }
   }
