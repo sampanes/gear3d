@@ -9,12 +9,18 @@ import { DEG, TAU } from '../math.js';
 // `helix` angle (degrees) twists the extrusion into a helical gear; the sign
 // selects the hand (meshing parallel-axis gears use an equal angle of opposite
 // hand, so a train alternates the sign down the chain).
-export function gearGeometry(params, { thickness = 8, bore = 0, helix = 0 } = {}) {
+export function gearGeometry(params, { thickness = 8, bore = 0, helix = 0, spokes = 0 } = {}) {
   const shape = new THREE.Shape(gearContour(params));
   if (bore > 0) {
     const hole = new THREE.Path();
     hole.absarc(0, 0, bore, 0, Math.PI * 2, true);
     shape.holes.push(hole);
+  }
+  // optional lightening cut-outs in the web between the hub and the toothed rim
+  for (const h of spokeHoles(params, bore, spokes)) {
+    const cut = new THREE.Path();
+    cut.absarc(h.x, h.y, h.r, 0, Math.PI * 2, true); // CW: a hole in the CCW gear shape
+    shape.holes.push(cut);
   }
   const bevel = Math.min(0.5, thickness * 0.08);
 
@@ -38,6 +44,33 @@ export function gearGeometry(params, { thickness = 8, bore = 0, helix = 0 } = {}
   if (twist !== 0) twistAboutZ(geo, twist, thickness);
   geo.computeVertexNormals();
   return geo;
+}
+
+// `spokes` evenly-spaced circular lightening cut-outs in the web between the hub
+// (around the bore/axle) and the toothed rim. Returns [{ x, y, r }] in the gear's
+// own plane, or [] when fewer than 3 are asked for or the web is too thin to fit a
+// sensible hole — so small pinions stay solid automatically. The hole radius is
+// auto-sized to the TIGHTER of the radial web (hub↔rim) and the tangential web
+// (the spoke/arm left between adjacent holes), then filled to 78%, so a hub, a
+// rim under the teeth, and an arm between every pair of holes are always preserved.
+export function spokeHoles(params, bore = 0, spokes = 0) {
+  const n = Math.round(spokes);
+  if (n < 3) return [];
+  const { r, rf } = gearMetrics(params);
+  const rHub = Math.max(bore, 0) + 0.12 * r; // keep a hub around the bore/axle
+  const rRim = rf - 0.18 * r; // keep a solid rim under the tooth roots
+  if (rRim - rHub < 0.12 * r) return []; // web too thin → leave the gear solid
+  const rMid = (rHub + rRim) / 2; // hole-centre ring
+  const radial = (rRim - rHub) / 2; // largest hole the radial web allows
+  const tangential = rMid * Math.sin(Math.PI / n); // largest the arm between holes allows
+  const rHole = 0.78 * Math.min(radial, tangential); // fill, leaving webs all around
+  if (rHole < 0.06 * r) return []; // would be a pinhole → skip
+  const holes = [];
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * TAU + Math.PI / n; // offset so an arm (not a hole) sits on +x
+    holes.push({ x: rMid * Math.cos(a), y: rMid * Math.sin(a), r: rHole });
+  }
+  return holes;
 }
 
 // Rotate every vertex about the Z axis by an angle proportional to its height,

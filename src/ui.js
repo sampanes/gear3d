@@ -45,6 +45,7 @@ export function buildGUI(config, actions, modeNames) {
   spur.add(config.spur, 'pressureAngle', 14.5, 25, 0.5).name('pressure angle').onChange(actions.rebuild);
   spur.add(config.spur, 'thickness', 2, 20, 0.5).onChange(actions.rebuild);
   spur.add(config.spur, 'helix', 0, 40, 1).name('helix angle °').onChange(actions.rebuild);
+  spur.add(config.spur, 'spokes', 0, 8, 1).name('spokes (cut-outs)').onChange(actions.rebuild);
 
   // ----- Geneva -----
   const gen = gui.addFolder('Geneva drive');

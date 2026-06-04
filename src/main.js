@@ -23,7 +23,7 @@ const config = {
   paused: false,
   wireframe: false,
   overlays: false, // pitch + base circles
-  spur: { gears: 3, t1: 12, t2: 24, t3: 18, t4: 15, t5: 30, module: 5, pressureAngle: 20, thickness: 8, helix: 0 },
+  spur: { gears: 3, t1: 12, t2: 24, t3: 18, t4: 15, t5: 30, module: 5, pressureAngle: 20, thickness: 8, helix: 0, spokes: 0 },
   geneva: { slots: 4, centerDistance: 100 },
   double: { amplitude: 35, size: 100 },
   internal: { module: 4, pinionTeeth: 12, ringTeeth: 48, pressureAngle: 20, thickness: 8 },
@@ -72,7 +72,7 @@ const MODES = {
   'Spur train': () => {
     const s = config.spur;
     const teeth = [s.t1, s.t2, s.t3, s.t4, s.t5].slice(0, s.gears);
-    return new SpurTrain({ teeth, module: s.module, pressureAngle: s.pressureAngle, thickness: s.thickness, helix: s.helix });
+    return new SpurTrain({ teeth, module: s.module, pressureAngle: s.pressureAngle, thickness: s.thickness, helix: s.helix, spokes: s.spokes });
   },
   Geneva: () => new Geneva(config.geneva),
   'Double Geneva': () => new DoubleGeneva(config.double),

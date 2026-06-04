@@ -3,8 +3,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
-import { gearGeometry, twistAboutZ, scaleConical, bevelGearGeometry } from '../src/gears/gear.js';
+import { gearGeometry, twistAboutZ, scaleConical, bevelGearGeometry, spokeHoles } from '../src/gears/gear.js';
 import { gearMetrics } from '../src/gears/involute.js';
+import { TAU, mod } from '../src/math.js';
 
 const PARAMS = { module: 4, teeth: 16, pressureAngle: 20 };
 const OPTS = { thickness: 10, bore: 4 };
@@ -136,4 +137,63 @@ test('bevelGearGeometry tapers toward the apex (front end smaller than back by z
   assert.ok(front < back, `front (${front}) should taper smaller than back (${back})`);
   // conical: the radius ratio equals the axial (z) ratio
   assert.ok(Math.abs(front / back - zMin / zMax) < 1e-3, `taper ratio ${front / back} != z ratio ${zMin / zMax}`);
+});
+
+// ---------------------------------------------------------------------------
+// Lightening cut-outs (spokes)
+// ---------------------------------------------------------------------------
+test('spokeHoles: N cut-outs clear the bore and the root, never overlap, evenly spaced & equal', () => {
+  const params = { module: 5, teeth: 24, pressureAngle: 20 };
+  const bore = 4;
+  const { rf } = gearMetrics(params);
+  for (const n of [3, 4, 5, 6, 8]) {
+    const holes = spokeHoles(params, bore, n);
+    assert.equal(holes.length, n, `n=${n}: ${n} cut-outs`);
+    const ring = Math.hypot(holes[0].x, holes[0].y);
+    for (let i = 0; i < n; i++) {
+      const h = holes[i];
+      const d = Math.hypot(h.x, h.y);
+      assert.ok(d - h.r >= bore, `n=${n} hole ${i}: clears the bore/axle (${d - h.r} >= ${bore})`);
+      assert.ok(d + h.r <= rf, `n=${n} hole ${i}: stays under the tooth root (${d + h.r} <= ${rf})`);
+      assert.ok(Math.abs(d - ring) < 1e-9, `n=${n} hole ${i}: on the one centre ring`);
+      assert.ok(Math.abs(h.r - holes[0].r) < 1e-9, `n=${n} hole ${i}: equal radius`);
+    }
+    // an arm (web) remains between every adjacent pair — they never touch
+    for (let i = 0; i < n; i++) {
+      const a = holes[i], b = holes[(i + 1) % n];
+      const sep = Math.hypot(a.x - b.x, a.y - b.y);
+      assert.ok(sep > a.r + b.r, `n=${n}: holes ${i},${(i + 1) % n} overlap (sep ${sep} <= ${a.r + b.r})`);
+    }
+    // even angular spacing
+    const ang = holes.map((h) => Math.atan2(h.y, h.x));
+    for (let i = 0; i < n; i++) {
+      const da = mod(ang[(i + 1) % n] - ang[i], TAU);
+      assert.ok(Math.abs(da - TAU / n) < 1e-9, `n=${n}: even angular spacing`);
+    }
+  }
+});
+
+test('spokeHoles: solid (no cut-outs) for <3 spokes or a web too thin to fit them', () => {
+  const big = { module: 5, teeth: 24, pressureAngle: 20 };
+  assert.deepEqual(spokeHoles(big, 4, 0), [], '0 spokes → solid');
+  assert.deepEqual(spokeHoles(big, 4, 2), [], '<3 spokes → solid');
+  // a 6-tooth pinion at this module has almost no web between hub and root → solid
+  const tiny = { module: 5, teeth: 6, pressureAngle: 20 };
+  assert.deepEqual(spokeHoles(tiny, 4, 5), [], 'tiny gear → solid (web too thin)');
+});
+
+test('gearGeometry: spokes punch extra cut-outs (more vertices); default 0 leaves the gear solid', () => {
+  const params = { module: 5, teeth: 24, pressureAngle: 20 };
+  const solid = gearGeometry(params, { thickness: 8, bore: 4, spokes: 0 });
+  const solidDefault = gearGeometry(params, { thickness: 8, bore: 4 });
+  assert.equal(
+    solid.attributes.position.count,
+    solidDefault.attributes.position.count,
+    'spokes:0 is identical to the default (solid)'
+  );
+  const spoked = gearGeometry(params, { thickness: 8, bore: 4, spokes: 5 });
+  assert.ok(
+    spoked.attributes.position.count > solid.attributes.position.count,
+    `5 cut-outs add wall geometry (${spoked.attributes.position.count} > ${solid.attributes.position.count})`
+  );
 });
