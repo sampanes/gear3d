@@ -22,6 +22,7 @@ import { TAU, mod, clamp, smootherstep } from './math.js';
 // engagement centre. This reaches -/+beta exactly at x = +/-gamma, and its
 // derivative is zero there — the pin enters and leaves with no angular shock.
 export function genevaGeometry(n) {
+  n = Math.max(3, Math.round(n)); // guard: n < 3 collapses the engagement window
   const beta = Math.PI / n;
   return {
     n,
@@ -181,6 +182,7 @@ export function spurGearAngle(i, theta0, teethList, phases) {
 //   omega_ring / omega_pinion = z_pinion / z_ring
 // (the ring turns slower). The centre distance is (z_ring - z_pinion)*module/2.
 export function internalGearRatio(zPinion, zRing) {
+  if (zRing <= 0) return 0; // guard: avoid Infinity/NaN on a degenerate ring
   return zPinion / zRing;
 }
 
@@ -201,6 +203,8 @@ export function internalGearRatio(zPinion, zRing) {
 // Returns absolute angles { sun, ring, carrier, planetSpin, zRing }, where
 // planetSpin is a planet's rotation about its own axis in the world frame.
 export function planetaryAngles(theta, zSun, zPlanet, fixed = 'ring') {
+  zSun = Math.max(1, zSun); // guards: keep the train-equation denominators finite
+  zPlanet = Math.max(1, zPlanet);
   const zRing = zSun + 2 * zPlanet;
   let sun;
   let ring;
@@ -237,6 +241,8 @@ export function planetaryAssembly(zSun, zRing, nPlanets) {
 // and gammaA + gammaB = shaft. The speed ratio is the usual omega_B/omega_A =
 // zA/zB (the gears counter-rotate about their own axes).
 export function bevelConeAngles(zA, zB, shaft = Math.PI / 2) {
+  zA = Math.max(1, zA); // guards: nonzero tooth counts so the ratio/cone are finite
+  zB = Math.max(1, zB);
   const gammaA = Math.atan2(Math.sin(shaft), zB / zA + Math.cos(shaft));
   return { gammaA, gammaB: shaft - gammaA, ratio: zA / zB };
 }

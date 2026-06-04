@@ -333,6 +333,18 @@ test('bevelConeAngles: half-angles sum to the shaft angle; ratio = zA/zB', () =>
   assert.ok(b.gammaA < b.gammaB, 'the smaller gear has the smaller cone angle');
 });
 
+test('kinematics guards: degenerate inputs are clamped, never Infinity/NaN', () => {
+  // Geneva n < 3 collapses the engagement window → clamp up to 3
+  near(genevaGeometry(2).beta, Math.PI / 3, 1e-12, 'n=2 clamps to 3');
+  near(genevaGeometry(1).gamma, Math.PI / 2 - Math.PI / 3, 1e-12, 'n=1 clamps to 3, gamma > 0');
+  assert.ok(genevaGeometry(2).gamma > 0);
+  // internalGearRatio with a degenerate ring → 0, not Infinity
+  assert.equal(internalGearRatio(12, 0), 0);
+  // planetary / bevel with zero teeth → finite, not NaN
+  assert.ok(Number.isFinite(planetaryAngles(1, 0, 0, 'ring').carrier));
+  assert.ok(Number.isFinite(bevelConeAngles(0, 0).ratio));
+});
+
 // ---------------------------------------------------------------------------
 // SATOR square — per-tile behaviors (P0 kinematics)
 // ---------------------------------------------------------------------------
