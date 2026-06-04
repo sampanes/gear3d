@@ -334,6 +334,92 @@ export function satorFlipRock(phi) {
   return Math.PI / 4 - 2 * satorFlipStar(phi);
 }
 
+// SATOR O-flip drive — the reciprocating double-Geneva ENGAGEMENT (the "Maltese math").
+// The cross (centred on O_c, output gear coaxial) is rocked ±amp by TWO meshed, counter-
+// rotating driver gears, each carrying one crank pin. The KEY fact: each pin/slot pairing
+// is a genuine external-Geneva engagement. With the driver centre OFFSET a distance c from
+// the cross and the crank radius a = c·sin(amp), the pin rides the slot centreline EXACTLY
+// and the cross reaches ±amp with zero angular velocity (soft entry/exit) — the very same
+// atan2 law as genevaStarAngle / doubleGenevaRocker, just with the cross (not a rocker) as
+// the slotted body. The two pins orbit DIFFERENT centres D1,D2 = (∓rd, −H) so the two gears
+// truly mesh and counter-rotate; the slots they enter face the drivers, at rest angles
+// σ = dir(O_c→D_i). Pin 1 (the CCW gear) rocks the cross +amp→−amp; pin 2 (the CW gear)
+// rocks it −amp→+amp — reciprocation, not indexing (each is the other's mirror across the
+// vertical, so their pushes cancel back and forth). The cross output is satorFlipStar, so
+// the O-flip stays exact; this geometry is what makes that motion a PROVEN pin-in-slot drive
+// rather than a scripted angle. See the standalone genevaStarAngle for the single-pin template.
+
+// Static geometry of the drive. The drivers MESH (centres 2·rd apart) AND sit a distance c
+// from the cross so the slot mouth lands on the cross rim at pin entry — that pins H (the
+// drivers' depth below the cross), it is not free. Returns the crank radius, the two slot
+// rest angles, and the two cam-pocket angles (a cam on D_i nests in pocket_i during the
+// dwell that precedes pin_i's push, blocking the cross — the genevaStarAngle lock, per pin).
+export function satorDriveGeometry(rim, rd, amp = Math.PI / 8) {
+  rim = Math.max(rim, 1e-6); // guard: a degenerate rim collapses the engagement
+  const c = rim / Math.cos(amp); // driver distance: at entry the slot mouth sits on the rim
+  const H = Math.sqrt(Math.max(0, c * c - rd * rd)); // drivers 2·rd apart (meshed) at distance c
+  const a = c * Math.sin(amp); // crank radius → a/c = sin(amp): exact ±amp rock, soft in/out
+  const sigmaA = Math.atan2(-H, -rd); // slot A rest (points toward D1, down-left)
+  const sigmaB = Math.atan2(-H, rd); // slot B rest (points toward D2, down-right)
+  return {
+    c, a, H, rd, amp, sigmaA, sigmaB,
+    slotBottom: c * (1 - Math.sin(amp)), // deepest pin reach from O_c
+    mouth: rim, // slot mouth radius (= rim) where the pin enters
+    pocketA: sigmaA - amp, // cam-A pocket: nests on D1 at the +amp dwell
+    pocketB: sigmaB + amp, // cam-B pocket: nests on D2 at the −amp dwell
+    D1: [-rd, -H], D2: [rd, -H],
+  };
+}
+
+// Angle of driver gear `which` (1 or 2) at board angle φ. The meshed gears turn ±2·φ — two
+// revolutions per board revolution, giving 4 pushes/board (one per 90° detent) — and the pin
+// is mounted at the phase that puts it on its slot centreline exactly when pin `which` drives.
+export function satorDriverAngle(phi, which, geom) {
+  const sign = which === 1 ? 1 : -1;
+  const sigma = which === 1 ? geom.sigmaA : geom.sigmaB;
+  return sign * 2 * phi + sigma + Math.PI / 2;
+}
+
+// Drive state at board angle φ: the cross rock (≡ satorFlipStar), which crank pin is engaged
+// (1, 2, or 0 during dwell), and BOTH crank pins' world positions — so the render places the
+// pins (provably on the engaged slot's centreline) and tests can verify it.
+export function satorDrivePins(phi, geom) {
+  const r = doubleGenevaRocker(2 * phi, geom.amp); // the proven rock: ±amp, dwell, reciprocating
+  const t1 = satorDriverAngle(phi, 1, geom);
+  const t2 = satorDriverAngle(phi, 2, geom);
+  return {
+    cross: r.angle, engaged: r.engaged, pin: r.pin,
+    theta1: t1, theta2: t2,
+    pos1: [geom.D1[0] + geom.a * Math.cos(t1), geom.D1[1] + geom.a * Math.sin(t1)],
+    pos2: [geom.D2[0] + geom.a * Math.cos(t2), geom.D2[1] + geom.a * Math.sin(t2)],
+  };
+}
+
+// Locking-cam geometry. Each driver carries a disc (radius camR) on its own axis with ONE
+// wedge GAP centred on its crank pin — i.e. at gear-local angle 0, since the pin mounts at
+// local (a, 0), so the gap tracks the pin as the gear turns. The gap half-angle is
+// gamma·gapFrac with gamma = π/2 − amp the engagement half-window. That is the whole trick:
+//   • gapHalf < gamma  → during each dwell the solid still covers the toward-O_c pocket
+//     contact (which sits gamma..(gamma+amp) ≈ 67.5°–112.5° off the pin), so the disc nests
+//     in the cross pocket and BLOCKS the (stationary) cross — both dwells lock 100%;
+//   • gapHalf ≥ the slot-mouth half-angle → the gap clears the slot channel through the whole
+//     push, so the moving cross is never fouled.
+// A cam centred on the line of centres instead (gap not on the pin) leaves a dwell unlocked.
+// Pure — the render feeds thetaStart/thetaLength straight into a CylinderGeometry sweep.
+export function satorCamGeometry(geom, gapFrac = 0.6) {
+  const gamma = Math.PI / 2 - geom.amp; // engagement half-window
+  const gapHalf = gamma * gapFrac; // gap half-angle, centred on the pin
+  const pocketR = geom.mouth - (geom.mouth - geom.slotBottom) * 0.55; // pocket dip radius
+  const camR = Math.max(geom.c - pocketR, geom.rd * 0.4); // disc inner edge kisses the pocket bottom
+  return {
+    gamma, gapHalf, pocketR, camR,
+    thetaStart: gapHalf, // solid sweeps [gapHalf, TAU−gapHalf] so the GAP is centred on local 0
+    thetaLength: TAU - 2 * gapHalf, // (= the pin direction, since the pin is at local (a,0))
+    locksAtPlus: 1, // cam on D1 locks the +amp dwell (its pocketA lands on D1 there)
+    locksAtMinus: 2, // cam on D2 locks the −amp dwell (its pocketB lands on D2 there)
+  };
+}
+
 // Per-cell behavior dispatcher: maps a tile behavior to its psi(Phi) — the
 // rotation relative to the board, for rendering. The gear network (planetary /
 // idler-ring / double-Geneva) is the printable realization of these forms.

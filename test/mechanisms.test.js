@@ -26,6 +26,9 @@ import {
   bevelConeAngles,
   toothPhaseAt,
   satorFlipStar,
+  satorDriverAngle,
+  satorDrivePins,
+  satorCamGeometry,
 } from '../src/kinematics.js';
 
 const near = (a, b, eps = 1e-12, msg = '') => assert.ok(Math.abs(a - b) <= eps, `${msg} ${a} !~= ${b}`);
@@ -354,11 +357,29 @@ test('SatorSquare: index (single-Geneva click) tiles report emergent legibility 
 test('SatorSquare: a geared shared drive is rendered per flip corner O-pair', () => {
   const m = new SatorSquare(CONFIG.sator); // default palette: all four O's flip → two corner pairs
   assert.equal(m.drives.length, 2, 'two corner O-pairs → two geared drives');
-  // the slotted star rocks per satorFlipStar (±22.5°), driving both O's via the 2:1 gear
+  // the solved drive: crank radius a/c = sin(amp) so the pins ride the slots exactly
+  near(m.drives[0].geom.a / m.drives[0].geom.c, Math.sin(Math.PI / 8), 1e-12, 'a/c = sin(amp)');
+  // the cross rocks per satorFlipStar (±22.5°); the meshed gears turn ±2φ (satorDriverAngle)
   for (const phi of [0, 0.8, Math.PI, 4.2]) {
     m.update(phi);
-    near(m.drives[0].star.rotation.z, satorFlipStar(phi), 1e-12, `star rocks @${phi}`);
-    near(m.drives[0].gears[0].rotation.z, 3 * phi, 1e-12, `meshed driver gear @${phi}`);
+    const geom = m.drives[0].geom;
+    near(m.drives[0].star.rotation.z, satorFlipStar(phi), 1e-12, `cross rocks @${phi}`);
+    near(m.drives[0].star.rotation.z, satorDrivePins(phi, geom).cross, 1e-12, `cross == satorDrivePins @${phi}`);
+    near(m.drives[0].gears[0].rotation.z, satorDriverAngle(phi, 1, geom), 1e-12, `driver 1 = +2φ @${phi}`);
+    near(m.drives[0].gears[1].rotation.z, satorDriverAngle(phi, 2, geom), 1e-12, `driver 2 = −2φ @${phi}`);
+  }
+  // the rendered drive's cam locks the cross at each detent dwell (gap-on-pin geometry)
+  const geom = m.drives[0].geom;
+  const cg = satorCamGeometry(geom);
+  const wrapPi = (x) => Math.atan2(Math.sin(x), Math.cos(x));
+  for (const phi of [0, Math.PI / 2, Math.PI, (3 * Math.PI) / 2]) {
+    const r = satorDrivePins(phi, geom);
+    assert.equal(r.engaged, false, `detent φ=${phi} is a dwell`);
+    const which = r.cross > 0 ? cg.locksAtPlus : cg.locksAtMinus;
+    const D = which === 1 ? geom.D1 : geom.D2;
+    const theta = which === 1 ? r.theta1 : r.theta2;
+    const block = Math.atan2(-D[1], -D[0]);
+    assert.ok(Math.abs(wrapPi(block - theta)) > cg.gapHalf, `rendered cam locks the cross at detent φ=${phi}`);
   }
   // a pair with a non-flip O gets no shared drive
   const cells = defaultCells();

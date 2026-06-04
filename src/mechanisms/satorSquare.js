@@ -10,9 +10,9 @@
 // export serialises) and `decor` (the block-letter glyphs, printed separately).
 
 import * as THREE from 'three';
-import { satorTileAngle, indexUpright, satorFlipStar } from '../kinematics.js';
+import { satorTileAngle, indexUpright, satorDriveGeometry, satorDrivePins, satorCamGeometry } from '../kinematics.js';
 import { makeGear } from '../gears/gear.js';
-import { TAU } from '../math.js';
+import { TAU, mod } from '../math.js';
 import { PALETTE, metal, disc, pin, disposeObject } from '../parts.js';
 
 export const SATOR_WORD = ['SATOR', 'AREPO', 'TENET', 'OPERA', 'ROTAS'];
@@ -120,46 +120,54 @@ function letterGroup(ch, size, depth, z) {
   return g;
 }
 
-// An illustrative shared double-Geneva drive for a flip diagonal O-pair: two
-// counter-rotating wheels + a rocker at the board centre, and one shaft running
-// along the pair's diagonal THROUGH the centre to both tiles — so a single drive
-// flips both O's. The rocker is driven straight from the flip value (so it stays
-// exactly in sync with the tiles); the shaft stands in for the cross-board
-// transmission rather than a full gear train. `gi` offsets each pair's drive to
-// its own z-plane behind the board so two diagonals don't collide.
-// Reciprocating Geneva "cross" (your reference): a driven disc with 2 radial
-// pin-slots (0°, 180°) that the driver pins enter, and 2 concave dwell pockets
-// (90°, 270°) that the driver locking-cams ride to hold it between strokes.
-// Looks like a 4-pointed star with two points grooved. Extruded.
-function genevaCrossGeo(R, slotW, slotDepth, thk) {
+// Reciprocating Geneva "cross": a centred disc with 2 radial PIN-SLOTS (the driver
+// crank pins ride these, exactly on the centreline — see kinematics.satorDrivePins)
+// and 2 concave DWELL POCKETS (the driver locking-cams nest here to hold the cross
+// between strokes). A slot opens at the rim (mouth) and runs inward to `bottom`; a
+// pocket dips in from the rim. The four feature ANGLES are passed in (the derivation
+// puts the slots facing the two drivers and the pockets `amp` beyond) rather than
+// hardcoded — so the rendered slots are the ones the pins provably enter. Extruded.
+function genevaCrossGeo(R, slotW, slotDepth, thk, slotAngles, pocketAngles) {
   const w = slotW;
   const bottom = R - slotDepth;
-  const dphi = Math.asin(Math.min(0.9, w / R));
   const tMouth = Math.sqrt(Math.max(0, R * R - w * w));
+  const dphi = Math.asin(Math.min(0.9, w / R)); // slot-mouth half-angle on the rim
   const pocketR = R - slotDepth * 0.55; // how far the dwell pocket dips in
   const V = (r, a) => new THREE.Vector2(r * Math.cos(a), r * Math.sin(a));
+  // walk the rim, inserting each feature's profile in angular order
+  const feats = [
+    ...slotAngles.map((a) => ({ a: mod(a, TAU), kind: 'slot' })),
+    ...pocketAngles.map((a) => ({ a: mod(a, TAU), kind: 'pocket' })),
+  ].sort((x, y) => x.a - y.a);
+  // smallest gap between adjacent features → clamp the pocket half-width so a pocket can
+  // never bleed into a neighbouring slot (the four features crowd into a downward wedge).
+  let minGap = TAU;
+  for (let i = 0; i < feats.length; i++) {
+    const g = feats[(i + 1) % feats.length].a - feats[i].a + (i + 1 === feats.length ? TAU : 0);
+    minGap = Math.min(minGap, g);
+  }
+  const pdphi = Math.max(0.02, Math.min(dphi * 1.6, 0.5, 0.9 * (minGap - dphi))); // pocket half-angle
   const pts = [];
-  for (let i = 0; i < 4; i++) {
-    const phi = i * (Math.PI / 2);
-    const ux = Math.cos(phi);
-    const uy = Math.sin(phi);
-    const vx = -Math.sin(phi);
-    const vy = Math.cos(phi);
-    if (i % 2 === 0) {
-      // SLOT arm (0° / 180°): a radial channel the pin rides
+  for (let i = 0; i < feats.length; i++) {
+    const f = feats[i];
+    if (f.kind === 'slot') {
+      const ux = Math.cos(f.a), uy = Math.sin(f.a); // radial (slot centre line)
+      const vx = -Math.sin(f.a), vy = Math.cos(f.a); // tangential (slot width)
       pts.push(new THREE.Vector2(ux * tMouth - vx * w, uy * tMouth - vy * w));
       pts.push(new THREE.Vector2(ux * bottom - vx * w, uy * bottom - vy * w));
       pts.push(new THREE.Vector2(ux * bottom + vx * w, uy * bottom + vy * w));
       pts.push(new THREE.Vector2(ux * tMouth + vx * w, uy * tMouth + vy * w));
     } else {
-      // POCKET arm (90° / 270°): a concave dwell notch for the locking cam
-      pts.push(V(R, phi - dphi));
-      pts.push(V(pocketR, phi - dphi * 0.4));
-      pts.push(V(pocketR, phi + dphi * 0.4));
-      pts.push(V(R, phi + dphi));
+      pts.push(V(R, f.a - pdphi));
+      pts.push(V(pocketR, f.a - pdphi * 0.4));
+      pts.push(V(pocketR, f.a + pdphi * 0.4));
+      pts.push(V(R, f.a + pdphi));
     }
-    const aExit = phi + dphi;
-    const aNext = phi + Math.PI / 2 - dphi;
+    // rim arc from this feature's exit to the next feature's entry
+    const next = feats[(i + 1) % feats.length];
+    const aExit = f.a + (f.kind === 'slot' ? dphi : pdphi);
+    let aNext = next.a - (next.kind === 'slot' ? dphi : pdphi);
+    if (aNext <= aExit) aNext += TAU;
     for (let k = 1; k <= 6; k++) pts.push(V(R, aExit + (aNext - aExit) * (k / 6)));
   }
   const shape = new THREE.Shape(pts);
@@ -172,16 +180,20 @@ function genevaCrossGeo(R, slotW, slotDepth, thk) {
   return geo;
 }
 
-// One shared drive for a corner O-pair, in the topology you sketched: TWO MESHED
-// driver gears (counter-rotating, one crank pin each) below a MALTESE STAR that
-// the pins strike to rock it ±22.5°. The star carries a coaxial output gear that
-// meshes a 2:1 gear on each O tile, turning both O's 0..90° in sync. (The star is
-// driven from satorFlipStar so the O-flip stays exact; the pin-in-slot timing is
-// visually aligned — the exact two-offset-driver Geneva engagement is a refine.)
+// One shared drive per corner O-pair: TWO MESHED, counter-rotating driver gears
+// (one crank pin + one locking cam each) below a centred reciprocating Geneva CROSS.
+// The crank pins ride the cross slots EXACTLY on the centreline and rock it ±22.5°;
+// the coaxial output gear meshes a 2:1 gear on each O tile, flipping both O's in sync.
+// Geometry is the SOLVED engagement (kinematics.satorDriveGeometry): the drivers mesh
+// (centres 2·rd apart) AND sit a distance c below the cross so the slot mouth lands on
+// the rim at pin entry, with crank radius a = c·sin(amp). The cross is driven from
+// satorDrivePins (≡ satorFlipStar), so the O-flip stays exact and the pins provably
+// drive it (proven in kinematics.test.js), no longer just visually aligned.
 function buildGearedDrive(p1, p2, oPivots, cell, thickness, gi) {
   const g = new THREE.Group();
   const mid = p1.clone().add(p2).multiplyScalar(0.5);
   const d = Math.max(p1.distanceTo(mid), 1);
+  const amp = Math.PI / 8; // cross rock half-swing (±22.5°)
   const Zo = 12;
   const Zs = 24; // 2:1 step-up (output gear : O gear)
   const m = (2 * d) / (Zs + Zo); // module so the pitch circles meet at distance d
@@ -199,40 +211,52 @@ function buildGearedDrive(p1, p2, oPivots, cell, thickness, gi) {
   g.position.set(mid.x, mid.y, zBack);
   g.rotation.z = Math.atan2(-mid.y, -mid.x) + Math.PI / 2; // "down" points toward the board centre
 
-  // star = output gear (meshes the O gears) + a coaxial 2-slot/2-pocket cross
+  // the SOLVED drive geometry: cross rim Rm, drivers (Zd teeth) meshing at 2·rd, set
+  // a distance c below the cross so the slots line up with the crank pins exactly.
   const Rs = (m * Zs) / 2;
-  const Rm = Rs * 0.72; // driven cross radius
+  const Rm = Rs * 0.72; // driven cross rim radius
+  const Zd = 10;
+  const rd = (m * Zd) / 2; // driver pitch radius (centres 2·rd apart -> meshed)
+  const geom = satorDriveGeometry(Rm, rd, amp);
+  const pinR = cell * 0.035;
+
+  // star = output gear (meshes the O gears) + the coaxial slotted/pocketed cross
   const star = new THREE.Object3D();
   const outGear = makeGear({ module: m, teeth: Zs, pressureAngle: pa }, PALETTE.driver, { thickness: gt });
-  const cross = new THREE.Mesh(genevaCrossGeo(Rm, Rm * 0.16, Rm * 0.42, gt * 0.9), metal(PALETTE.output));
+  const slotW = Math.max(pinR * 1.25, Rm * 0.05);
+  const cross = new THREE.Mesh(
+    genevaCrossGeo(Rm, slotW, Rm - geom.slotBottom, gt * 0.9, [geom.sigmaA, geom.sigmaB], [geom.pocketA, geom.pocketB]),
+    metal(PALETTE.output)
+  );
   cross.position.z = -gt; // just behind the output gear
   cross.castShadow = true;
   star.add(outGear, cross);
   g.add(star);
 
-  // two MESHED driver gears below the cross, counter-rotating; each carries a
-  // crank pin (strikes a slot) and a locking cam (rides a dwell pocket)
-  const Zd = 10;
-  const rd = (m * Zd) / 2; // driver pitch radius (centres 2*rd apart -> meshed)
-  const cy = -(Rm + rd * 0.9); // gear centres below the cross; pins reach up toward it
-  const ap = rd * 0.7; // crank pin orbit
+  // the two meshed driver gears at D1=(−rd,−H), D2=(+rd,−H); each crank pin orbits at
+  // radius a (mounted at local (a,0) so its world angle == the gear angle), each cam is a
+  // disc with a wedge gap CENTRED ON ITS PIN (gear-local 0) and narrower than gamma, so its
+  // solid covers the pocket during dwell (locks the cross) yet clears the slot during the
+  // push — see kinematics.satorCamGeometry, which proves both dwells lock and every push clears.
   const dz = -gt - gt * 0.9 - thickness * 0.16; // driver plane, behind the cross
+  const cg = satorCamGeometry(geom);
   const gears = [];
-  for (const s of [1, -1]) {
+  for (const which of [1, 2]) {
+    const D = which === 1 ? geom.D1 : geom.D2;
     const gw = new THREE.Object3D();
-    gw.position.set(s * rd, cy, 0);
-    const gear = makeGear({ module: m, teeth: Zd, pressureAngle: pa }, s > 0 ? PALETTE.driver : PALETTE.driven, { thickness: gt });
+    gw.position.set(D[0], D[1], 0);
+    const gear = makeGear({ module: m, teeth: Zd, pressureAngle: pa }, which === 1 ? PALETTE.driver : PALETTE.driven, { thickness: gt });
     gear.position.z = dz;
-    const camGeo = new THREE.CylinderGeometry(rd * 0.62, rd * 0.62, gt * 0.8, 24, 1, false, 0.7, TAU - 1.4);
-    camGeo.rotateX(Math.PI / 2);
+    const camGeo = new THREE.CylinderGeometry(cg.camR, cg.camR, gt * 0.8, 24, 1, false, cg.thetaStart, cg.thetaLength);
+    camGeo.rotateX(Math.PI / 2); // gap centred on local +x (angle 0) = where the pin sits
     const cam = new THREE.Mesh(camGeo, metal(PALETTE.lock, { rough: 0.6, metalness: 0.4 }));
     cam.position.z = dz + gt; // locking cam toward the cross
-    gw.add(gear, cam, pin(0, ap, cell * 0.035, gt + thickness * 0.18, dz)); // crank pin reaches the slot
+    gw.add(gear, cam, pin(geom.a, 0, pinR, gt + thickness * 0.18, dz)); // crank pin rides the slot
     g.add(gw);
     gears.push(gw);
   }
 
-  return { group: g, star, gears };
+  return { group: g, star, gears, geom };
 }
 
 export class SatorSquare {
@@ -331,13 +355,13 @@ export class SatorSquare {
       t.gearPivot.rotation.z = psi;
       t.letterPivot.rotation.z = psi;
     }
-    if (this.drives.length) {
-      const s = satorFlipStar(phi); // Maltese star rocks ±22.5°, dwelling at the detents
-      for (const d of this.drives) {
-        d.star.rotation.z = s;
-        d.gears[0].rotation.z = 3 * phi; // meshed driver gears counter-rotate; pins strike the star
-        d.gears[1].rotation.z = -3 * phi;
-      }
+    for (const d of this.drives) {
+      // solved engagement: the meshed gears turn ±2φ so each crank pin rides its slot on
+      // the centreline, rocking the cross by satorFlipStar (dwelling ±22.5° at the detents).
+      const s = satorDrivePins(phi, d.geom);
+      d.star.rotation.z = s.cross;
+      d.gears[0].rotation.z = s.theta1; // +2φ + phase (CCW)
+      d.gears[1].rotation.z = s.theta2; // −2φ + phase (CW, meshed)
     }
   }
 

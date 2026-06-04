@@ -5,7 +5,8 @@
 > (`src/mechanisms/satorSquare.js`), plus two later additions: an **`index`**
 > (single-Geneva clicking) tile behavior, and a rendered **geared O-flip drive**
 > — a double-Geneva *reciprocating* mechanism (see [O-flip drive](#o-flip-drive--double-geneva-reciprocating-mechanism)
-> below, which has one open item). This document is the design it was built from.
+> below, whose pin-in-slot engagement is now **fully derived and unit-tested**).
+> This document is the design it was built from.
 
 A wall-mounted **5×5 letter board** carrying the Latin SATOR word square. You
 turn the whole board on the wall; **every 90° of board rotation the square reads
@@ -148,7 +149,8 @@ The planetary/ring primitives already exist, so the genuinely new pieces are:
 
 ## O-flip drive — double-Geneva *reciprocating* mechanism
 
-> Status: kinematics + render done; **engagement not yet derived** (see *Open*).
+> Status: **solved.** Kinematics + render + the pin-in-slot engagement
+> derivation, all unit-tested (see *Solved* below).
 
 The four **O** tiles flip (read upright-or-inverted at every 90°). Unlike the
 other letters they are **not** held upright by an idler — each **rides the
@@ -181,12 +183,22 @@ board**, and a small drive supplies only the correction. The drive is a
 
 ### Code
 
-- `kinematics.satorFlipStar(Φ)` — the cross rock, ±22.5°, dwelling at the detents
-  (`doubleGenevaRocker(2Φ, π/8)`).
-- `kinematics.satorFlipRock(Φ) = π/4 − 2·satorFlipStar(Φ)` — the O's 0..90° rock;
-  `satorTileAngle('flip')` returns this.
-- `mechanisms/satorSquare.js` — `genevaCrossGeo` (the 2-slot/2-pocket cross) and
-  `buildGearedDrive` (cross + output gear + two meshed cam-and-pin drivers).
+- `kinematics.satorFlipStar(Φ)` / `satorFlipRock(Φ)` — the cross rock (±22.5°,
+  `doubleGenevaRocker(2Φ, π/8)`) and the O's 0..90° rock (`π/4 − 2·satorFlipStar`);
+  `satorTileAngle('flip')` returns the latter.
+- `kinematics.satorDriveGeometry(rim, rd, amp)` — the solved static geometry:
+  centre distance `c`, crank radius `a`, driver depth `H`, the two slot rest angles
+  `σ_A,σ_B`, the two cam-pocket angles, and the slot-bottom radius.
+- `kinematics.satorDriverAngle(Φ, which, geom)` — the ±2Φ (+phase) gear angles;
+  `kinematics.satorDrivePins(Φ, geom)` — the cross angle (≡ `satorFlipStar`), the
+  engaged pin index, and both crank-pin world positions (on the engaged slot's
+  centreline).
+- `kinematics.satorCamGeometry(geom)` — the locking-cam geometry: disc radius, and
+  the wedge-gap `thetaStart`/`thetaLength` (gap centred on the pin, half-width
+  `γ·0.6`) that the render feeds straight to a `CylinderGeometry`.
+- `mechanisms/satorSquare.js` — `genevaCrossGeo` (the 2-slot/2-pocket cross, with
+  the slot & pocket angles passed in) and `buildGearedDrive` (cross + output gear +
+  two meshed cam-and-pin drivers, all placed from `satorDriveGeometry`).
 
 ### How we got here (brief)
 
@@ -197,15 +209,59 @@ harder to print); coaxial counter-rotating wheels. A reference (a Fusion-360
 "Double-Geneva reciprocating mechanism": two meshed gears + a 2-slot/2-pocket
 cross + cams) is flatter and printable, so the drive was retopologized to it.
 
-### Open — derive the engagement
+### Solved — the engagement
 
-The render's **geometry** matches the reference and the **O-flip output is
-exact** (driven from `satorFlipStar`), but the **pin-in-slot engagement is
-currently phased to look right, not solved**. The remaining "actual Maltese
-math" is the two-offset-meshed-driver reciprocation: solve it so the pins
-*provably* drive the cross and the cams *provably* lock it during dwell — the
-standalone single Geneva's verified pin-on-slot-centerline (`genevaStarAngle`)
-is the template. Until then the drivers are illustrative.
+The two-offset-meshed-driver reciprocation is derived and unit-tested: the pins
+*provably* drive the cross (on the slot centerline) and the cams *provably* lock
+it during dwell. The drivers are no longer illustrative.
+
+- **Key insight.** Each crank-pin/slot pairing is an ordinary *external Geneva*
+  engagement — just with the driver centre **offset** from the centred cross.
+  With the driver a distance `c` from the cross centre and the crank radius
+  `a = c·sin(amp)`, the cross angle obeys the same `atan2` law as
+  `genevaStarAngle`/`doubleGenevaRocker`, so the pin rides the slot centerline
+  **exactly** and the cross reaches ±amp with zero angular velocity (soft
+  entry/exit). The two pins orbit *different* centres `D₁,D₂ = (∓rd, −H)` — which
+  is what lets the two driver gears genuinely **mesh and counter-rotate** — and
+  they enter two slots that *face the drivers*, at rest angles `σ = dir(O_c→D_i)`,
+  separated by `2·atan2(rd,H)` (not 180°; the earlier "0°/180°" was the
+  unsolved placeholder).
+- **Reciprocation, not indexing.** Pin 1 (the CCW gear) is the mirror of pin 2
+  (the CW gear) across the vertical, so pin 1 rocks the cross +amp→−amp and pin 2
+  rocks it −amp→+amp — they alternate, rocking back and forth rather than indexing
+  one way.
+- **Numbers.** The drivers mesh (centres `2·rd` apart) **and** sit a distance
+  `c = rim/cos(amp)` from the cross, which fixes `H = √(c²−rd²)` (it is *not* free)
+  and lands the slot mouth on the cross rim at pin entry. amp = π/8, so each push
+  rocks the cross ±22.5°. The meshed gears turn **±2Φ** (two revs/board → 4 pushes,
+  one per 90° detent) — *not* the old illustrative ±3Φ — phased so the pushes land
+  at Φ = 45°,135°,225°,315° and the dwells cover the detents. The cross output is
+  still `satorFlipStar` exactly, so the O-flip motion is untouched.
+- **Locking.** Each driver carries a cam — a disc on `D_i` with one wedge gap
+  **centred on its crank pin** (gear-local angle 0, since the pin mounts at
+  `(a,0)`, so the gap tracks the pin as the gear turns), half-width `γ·0.6` with
+  `γ = π/2−amp` the engagement half-window. That is the whole trick: the gap is
+  *narrower* than `γ`, so during each dwell the solid still covers the toward-`O_c`
+  pocket contact (which sits ≈ 67.5°–112.5° off the pin) and **locks** the cross,
+  yet it is wide enough to clear the slot channel through the push. A concave
+  pocket on the cross at local angle `σ_i ∓ amp` rotates onto `D_i` exactly at the
+  dwell it holds (`pocketA`→D₁ at +amp, `pocketB`→D₂ at −amp), so the disc nests
+  in it. (Centring the gap on the line of centres instead leaves a dwell unlocked —
+  the one defect the adversarial pass caught and corrected.)
+
+**Tests** (`test/kinematics.test.js`, in the `genevaStarAngle` style): the engaged
+pin rides the slot centerline to ~1e-15 across the whole window (radius sweeping
+slot-bottom → mouth); the drive reciprocates (pin 1 +amp→−amp, pin 2 −amp→+amp)
+and the cross equals `satorFlipStar`; the meshed gears counter-rotate at ±2Φ; each
+cam pocket lands on its driver axis at the dwell it holds; and the gap-on-pin cam
+locks **both** dwells 100% (sampled) while clearing every push.
+`test/mechanisms.test.js` checks the render wires `update()` onto these and that
+the rendered drive's cam locks the cross at every detent.
+
+> Derivation method: four independent re-derivations (different framings) plus an
+> adversarial pass on each load-bearing claim, then an empirical check — the pin
+> stays on the slot centerline and the geometry reproduces `satorFlipStar` to
+> machine precision.
 
 ### Seeing it (offline)
 

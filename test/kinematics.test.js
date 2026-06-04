@@ -26,6 +26,10 @@ import {
   satorFlipStar,
   satorFlipRock,
   satorTileAngle,
+  satorDriveGeometry,
+  satorDriverAngle,
+  satorDrivePins,
+  satorCamGeometry,
 } from '../src/kinematics.js';
 
 const near = (a, b, eps = 1e-9, msg = '') => assert.ok(Math.abs(a - b) <= eps, `${msg} ${a} !~= ${b}`);
@@ -464,4 +468,136 @@ test('satorFlipRock: O rides the board and rocks 0..90° (board frame), legible 
   near(satorFlipStar(0), Math.PI / 8, 1e-9, 'star +22.5° at even detent');
   near(satorFlipStar(Math.PI / 2), -Math.PI / 8, 1e-9, 'star −22.5° at odd detent');
   near(satorFlipRock(0), Math.PI / 4 - 2 * satorFlipStar(0), 1e-12, 'tile = 2:1 up from star');
+});
+
+// --- SATOR O-flip drive: the reciprocating double-Geneva engagement (the "Maltese math") ---
+test('satorDriveGeometry: a/c = sin(amp), slot mouth = rim, drivers mesh (2·rd apart) at distance c, slots face the drivers', () => {
+  const amp = Math.PI / 8;
+  for (const [rim, rd] of [[8.64, 5], [12, 6], [20, 7]]) {
+    const g = satorDriveGeometry(rim, rd, amp);
+    near(g.a / g.c, Math.sin(amp), 1e-12, 'a/c = sin(amp) → soft ±amp Geneva rock');
+    near(g.c * Math.cos(amp), rim, 1e-9, 'slot mouth lands on the rim at pin entry');
+    near(g.mouth, rim, 1e-12, 'mouth = rim');
+    near(Math.hypot(g.rd, g.H), g.c, 1e-9, 'meshed drivers (2·rd apart) sit at distance c');
+    near(g.rd, rd, 1e-12, 'driver pitch radius preserved');
+    near((g.sigmaA + g.sigmaB) / 2, -Math.PI / 2, 1e-12, 'slots symmetric about straight-down');
+    near(g.sigmaB - g.sigmaA, 2 * Math.atan2(rd, g.H), 1e-12, 'slot separation = 2·atan2(rd,H)');
+    assert.ok(g.slotBottom > 0 && g.slotBottom < rim, 'pin bottoms out inside the rim');
+  }
+});
+
+test('satorDrivePins: the engaged crank pin rides EXACTLY on the cross slot centerline (true Maltese drive)', () => {
+  const amp = Math.PI / 8;
+  const g = satorDriveGeometry(8.64, 5, amp);
+  // transform the engaged world pin into the cross-local frame and decompose along/perp to
+  // its slot ray (sigmaA for pin 1, sigmaB for pin 2): on the centerline iff perp ≈ 0.
+  const local = (phi) => {
+    const r = satorDrivePins(phi, g);
+    const pos = r.pin === 1 ? r.pos1 : r.pos2;
+    const sigma = r.pin === 1 ? g.sigmaA : g.sigmaB;
+    const lx = pos[0] * Math.cos(-r.cross) - pos[1] * Math.sin(-r.cross);
+    const ly = pos[0] * Math.sin(-r.cross) + pos[1] * Math.cos(-r.cross);
+    return { engaged: r.engaged, pin: r.pin, along: lx * Math.cos(sigma) + ly * Math.sin(sigma), perp: -lx * Math.sin(sigma) + ly * Math.cos(sigma) };
+  };
+  // (a) through every engaged instant the pin stays on the slot centerline
+  let maxOff = 0, sawPin1 = false, sawPin2 = false;
+  for (let i = 0; i <= 2000; i++) {
+    const r = local((i / 2000) * TAU);
+    if (!r.engaged) continue;
+    if (r.pin === 1) sawPin1 = true; else sawPin2 = true;
+    maxOff = Math.max(maxOff, Math.abs(r.perp));
+  }
+  assert.ok(sawPin1 && sawPin2, 'both pins engage across a board revolution');
+  assert.ok(maxOff < 1e-9, `pin drifts ${maxOff} off the slot centerline`);
+  // (b) radius sweeps slot-bottom (deepest, at the push centre) → mouth (at the engagement edge)
+  const gammaP = Math.PI / 2 - amp;
+  near(local(Math.PI / 4).along, g.slotBottom, 1e-9, 'pin 1 deepest at the push centre');
+  near(local(Math.PI / 4 - gammaP / 2).along, g.mouth, 1e-9, 'pin 1 at the mouth at the engagement edge');
+  near(local((3 * Math.PI) / 4).along, g.slotBottom, 1e-9, 'pin 2 deepest at the push centre');
+});
+
+test('satorDrivePins: reciprocates (pin 1 +amp→−amp, pin 2 −amp→+amp) and the cross equals satorFlipStar', () => {
+  const g = satorDriveGeometry(8.64, 5);
+  for (const phi of [0, 0.3, 0.8, Math.PI / 2, Math.PI, 4.2]) {
+    near(satorDrivePins(phi, g).cross, satorFlipStar(phi), 1e-12, `cross = satorFlipStar @${phi}`);
+  }
+  const h = 1e-4;
+  // pin 1 drives around φ=π/4 (cross decreasing: +amp→−amp)
+  assert.equal(satorDrivePins(Math.PI / 4, g).pin, 1, 'pin 1 drives near φ=π/4');
+  assert.ok(
+    satorDrivePins(Math.PI / 4 + h, g).cross < satorDrivePins(Math.PI / 4 - h, g).cross,
+    'pin 1: cross +amp→−amp'
+  );
+  // pin 2 drives around φ=3π/4 (cross increasing: −amp→+amp)
+  assert.equal(satorDrivePins((3 * Math.PI) / 4, g).pin, 2, 'pin 2 drives near φ=3π/4');
+  assert.ok(
+    satorDrivePins((3 * Math.PI) / 4 + h, g).cross > satorDrivePins((3 * Math.PI) / 4 - h, g).cross,
+    'pin 2: cross −amp→+amp'
+  );
+});
+
+test('satorDriverAngle: meshed driver gears counter-rotate at ±2φ (two revs/board → 4 pushes/board)', () => {
+  const g = satorDriveGeometry(8.64, 5);
+  for (const phi of [0.2, 1.0, -0.7, TAU + 0.5]) {
+    near(satorDriverAngle(phi, 1, g) - satorDriverAngle(0, 1, g), 2 * phi, 1e-12, 'gear 1 = +2φ');
+    near(satorDriverAngle(phi, 2, g) - satorDriverAngle(0, 2, g), -2 * phi, 1e-12, 'gear 2 = −2φ (counter)');
+  }
+});
+
+test('satorDrive cam lock: each pocket arc-centre lands on its driver axis at the dwell it holds (cam nests, cross blocked)', () => {
+  const amp = Math.PI / 8;
+  const g = satorDriveGeometry(8.64, 5, amp);
+  // pocket A (held at +amp) rotates onto D1; pocket B (held at −amp) onto D2 — so a cam disc
+  // centred on D_i nests in the pocket and blocks the (stationary) cross during that dwell.
+  const pocketWorld = (rho, psi) => [g.c * Math.cos(rho + psi), g.c * Math.sin(rho + psi)];
+  const pA = pocketWorld(g.pocketA, amp);
+  const pB = pocketWorld(g.pocketB, -amp);
+  near(Math.hypot(pA[0] - g.D1[0], pA[1] - g.D1[1]), 0, 1e-9, 'pocket A nests on D1 at the +amp dwell');
+  near(Math.hypot(pB[0] - g.D2[0], pB[1] - g.D2[1]), 0, 1e-9, 'pocket B nests on D2 at the −amp dwell');
+  // and the cross is genuinely dwelling (disengaged, stationary) at those holds
+  assert.equal(satorDrivePins(0, g).engaged, false, '+amp dwell at φ=0 is disengaged');
+  near(satorDrivePins(0, g).cross, amp, 1e-12, 'cross held at +amp');
+  assert.equal(satorDrivePins(Math.PI / 2, g).engaged, false, '−amp dwell at φ=π/2 is disengaged');
+  near(satorDrivePins(Math.PI / 2, g).cross, -amp, 1e-12, 'cross held at −amp');
+});
+
+test('satorCamGeometry: the gap-on-pin cam locks BOTH dwells (100%) and stays within bounds', () => {
+  const amp = Math.PI / 8;
+  const wrapPi = (x) => Math.atan2(Math.sin(x), Math.cos(x));
+  for (const [rim, rd] of [[8.64, 5], [13.57, 7.85]]) {
+    const g = satorDriveGeometry(rim, rd, amp);
+    const cg = satorCamGeometry(g);
+    // bounds: narrower than the engagement window (so the solid covers the pocket at dwell),
+    // wide enough for the slot mouth (so it clears the channel at the push)
+    const slotW = Math.max(rd * 0.035 * 1.25, rim * 0.05);
+    const mouthHalf = Math.asin(Math.min(0.9, slotW / rim));
+    assert.ok(cg.gapHalf < cg.gamma, `gapHalf ${cg.gapHalf} must be < gamma ${cg.gamma} (else dwell unlocks)`);
+    assert.ok(cg.gapHalf >= mouthHalf, `gapHalf ${cg.gapHalf} must clear the slot mouth ${mouthHalf}`);
+    // cam disc: positive, kisses the pocket bottom, two cams never collide (2·camR < 2·rd)
+    assert.ok(cg.camR > 0, 'camR > 0');
+    assert.ok(2 * cg.camR < 2 * rd, `cams never collide (2·${cg.camR} < ${2 * rd})`);
+    near(g.c - cg.pocketR, cg.camR, 1e-9, 'disc inner edge kisses the pocket bottom');
+    assert.ok(cg.pocketR > g.slotBottom && cg.pocketR < rim, 'pocket dips inside the rim, above the slot bottom');
+    // the holding cam (D1 at +amp, D2 at −amp) keeps its SOLID over the toward-O_c pocket
+    // contact at EVERY dwell instant — the gap (on the pin) never exposes it. (A cam centred
+    // on the line of centres, or wider than gamma, scores 0% here at one dwell.)
+    let sawPlus = false, sawMinus = false, dwellN = 0;
+    for (let i = 0; i <= 2000; i++) {
+      const phi = (i / 2000) * TAU;
+      const r = satorDrivePins(phi, g);
+      if (r.engaged) continue;
+      dwellN += 1;
+      const plus = r.cross > 0; // +amp dwell -> D1 holds; −amp -> D2 holds
+      if (plus) sawPlus = true; else sawMinus = true;
+      const which = plus ? cg.locksAtPlus : cg.locksAtMinus;
+      const D = which === 1 ? g.D1 : g.D2;
+      const theta = which === 1 ? r.theta1 : r.theta2; // gap is centred on theta (the pin)
+      const block = Math.atan2(-D[1], -D[0]); // toward O_c: where the cam must bear on the pocket
+      assert.ok(
+        Math.abs(wrapPi(block - theta)) > cg.gapHalf,
+        `dwell @φ=${phi.toFixed(2)} (cross ${r.cross.toFixed(3)}): cam gap exposes the pocket — UNLOCKED`
+      );
+    }
+    assert.ok(sawPlus && sawMinus && dwellN > 0, 'saw both +amp and −amp dwells');
+  }
 });
