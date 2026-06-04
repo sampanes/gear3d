@@ -1,9 +1,11 @@
 # SATOR square — mechanism design
 
-> Status: **implemented.** All phases — P0 kinematics through the P5 per-cell
-> behavior editor + presets — are built and unit-tested as the *SATOR square*
-> mode (`src/mechanisms/satorSquare.js`). This document is the design it was
-> built from.
+> Status: **implemented.** All phases (P0 kinematics → P5 per-cell editor +
+> presets) are built and unit-tested as the *SATOR square* mode
+> (`src/mechanisms/satorSquare.js`), plus two later additions: an **`index`**
+> (single-Geneva clicking) tile behavior, and a rendered **geared O-flip drive**
+> — a double-Geneva *reciprocating* mechanism (see [O-flip drive](#o-flip-drive--double-geneva-reciprocating-mechanism)
+> below, which has one open item). This document is the design it was built from.
 
 A wall-mounted **5×5 letter board** carrying the Latin SATOR word square. You
 turn the whole board on the wall; **every 90° of board rotation the square reads
@@ -144,6 +146,74 @@ The planetary/ring primitives already exist, so the genuinely new pieces are:
 - **P4 ✅** printable/decor split — STL export passes `mechanism.printable` (letters excluded).
 - **P5 ✅** per-cell behavior editor + built-in presets (Default / All upright / Max flip / Playful).
 
+## O-flip drive — double-Geneva *reciprocating* mechanism
+
+> Status: kinematics + render done; **engagement not yet derived** (see *Open*).
+
+The four **O** tiles flip (read upright-or-inverted at every 90°). Unlike the
+other letters they are **not** held upright by an idler — each **rides the
+board**, and a small drive supplies only the correction. The drive is a
+*reciprocating* double-Geneva, one per **close corner pair** of O's
+(`{(0,3),(1,4)}` and `{(3,0),(4,1)}`):
+
+- **Two meshed driver gears** (counter-rotating from one input), each with a
+  **crank pin** and a **locking cam**.
+- A driven **Geneva cross**: a disc with **2 radial pin-slots (0°/180°)** and
+  **2 concave dwell pockets (90°/270°)** — a 4-pointed star with two grooved
+  points.
+- The two pins **alternately** enter the slots and **rock** the cross one way
+  then back (reciprocation); the cams ride the pockets to **lock** it between
+  strokes.
+- The cross carries a coaxial **output gear** that meshes a **2:1** gear on each
+  O of the pair → both O's flip in sync.
+
+### The numbers (one board quarter-turn)
+
+- A board-riding O ends up **sideways**; the minimum to read again is a **90°**
+  correction (board frame). It's 90° — not 45° or 180° — because the O is
+  180°-symmetric, so landing on **0° or 180°** both read as "O" (hence the
+  correction may go *either* direction).
+- So the drive rocks the O **90°** (board frame); with the board's own
+  90°/detent that is a **180° flip-and-hold** in the world frame.
+- Via the **2:1** gear the **cross rocks 45° (±22.5°)** to produce the O's 90°.
+  Chain: **cross 45° → O 90° (board) → 180° world flip.** The O reads at every
+  detent because it sits at 0° or 180° there.
+
+### Code
+
+- `kinematics.satorFlipStar(Φ)` — the cross rock, ±22.5°, dwelling at the detents
+  (`doubleGenevaRocker(2Φ, π/8)`).
+- `kinematics.satorFlipRock(Φ) = π/4 − 2·satorFlipStar(Φ)` — the O's 0..90° rock;
+  `satorTileAngle('flip')` returns this.
+- `mechanisms/satorSquare.js` — `genevaCrossGeo` (the 2-slot/2-pocket cross) and
+  `buildGearedDrive` (cross + output gear + two meshed cam-and-pin drivers).
+
+### How we got here (brief)
+
+Earlier passes: holding the O upright + a full `{0, π}` 180° toggle (overkill —
+and a *real* Geneva can't swing a full 180°, that's its degenerate limit); a
+single-slot **swinging slotted lever** (works, but the offset pivot is taller /
+harder to print); coaxial counter-rotating wheels. A reference (a Fusion-360
+"Double-Geneva reciprocating mechanism": two meshed gears + a 2-slot/2-pocket
+cross + cams) is flatter and printable, so the drive was retopologized to it.
+
+### Open — derive the engagement
+
+The render's **geometry** matches the reference and the **O-flip output is
+exact** (driven from `satorFlipStar`), but the **pin-in-slot engagement is
+currently phased to look right, not solved**. The remaining "actual Maltese
+math" is the two-offset-meshed-driver reciprocation: solve it so the pins
+*provably* drive the cross and the cams *provably* lock it during dwell — the
+standalone single Geneva's verified pin-on-slot-centerline (`genevaStarAngle`)
+is the template. Until then the drivers are illustrative.
+
+### Seeing it (offline)
+
+`node tools/shoot.mjs` renders frozen states to `tools/shots/` headlessly via
+Playwright (one-time `npx playwright install chromium`; capture is offline). The
+live app honours `?mode=SATOR%20square&angle=<deg>&az=&el=&drives=0|1`;
+`sator-drive.png` is the 3/4 view of the drives.
+
 ## How it ships
 
 - SATOR is planned as **one more entry in the existing mode switcher**
@@ -152,9 +222,10 @@ The planetary/ring primitives already exist, so the genuinely new pieces are:
   plus tiny wiring in `main.js` / `ui.js` and a fenced section in `kinematics.js`
   — so free-form gear building stays exactly as it is and there is no fork to
   cherry-pick between.
-- The one shared change — generalizing `doubleGenevaOutput`'s dwell targets from
-  `{−amp, +amp}` to `{0, π}` for the O flip — is **backward-compatible** and also
-  makes the existing Double Geneva mode more capable.
+- The **O flip** evolved past the simple `{0, π}` toggle into the geared
+  reciprocating drive in [O-flip drive](#o-flip-drive--double-geneva-reciprocating-mechanism)
+  above; the original `doubleGenevaOutput` `{0, π}` generalization remains in
+  `kinematics.js` (with its tests) but is no longer the flip path.
 - The **Spin** behavior reuses the committed planetary primitive
   (`planetaryAngles`, `Planetary`, `makeRingGear`) rather than duplicating it.
 - The repo is **local-only — commit, never push.**

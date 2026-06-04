@@ -23,8 +23,17 @@ npm run preview  # serve the built bundle
 ```
 
 ```bash
-npm test         # kinematics + involute-geometry unit tests (node:test, no deps)
+npm test         # unit tests (kinematics, involute geometry, mechanism update(), STL) — node:test, no deps
+npm run lint     # ESLint (flat config); also runs via .githooks/pre-commit
 ```
+
+```bash
+node tools/shoot.mjs   # offline headless screenshots of each mode -> tools/shots/
+```
+
+Screenshots use Playwright's headless-shell Chromium (one-time `npx playwright
+install chromium`; capture itself is offline). The app reads `?mode=…&angle=<deg>&az=&el=`
+URL params to freeze a deterministic state for capture.
 
 ## Controls
 
