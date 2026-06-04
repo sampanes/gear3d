@@ -354,10 +354,11 @@ test('SatorSquare: index (single-Geneva click) tiles report emergent legibility 
 test('SatorSquare: a geared shared drive is rendered per flip corner O-pair', () => {
   const m = new SatorSquare(CONFIG.sator); // default palette: all four O's flip → two corner pairs
   assert.equal(m.drives.length, 2, 'two corner O-pairs → two geared drives');
-  // the star gear rocks per satorFlipStar (±22.5°), driving both O's via the 2:1 gear
+  // the slotted star rocks per satorFlipStar (±22.5°), driving both O's via the 2:1 gear
   for (const phi of [0, 0.8, Math.PI, 4.2]) {
     m.update(phi);
-    near(m.drives[0].starGear.rotation.z, satorFlipStar(phi), 1e-12, `star gear rocks @${phi}`);
+    near(m.drives[0].star.rotation.z, satorFlipStar(phi), 1e-12, `star rocks @${phi}`);
+    near(m.drives[0].front.rotation.z, 2 * phi, 1e-12, `front driver @${phi}`);
   }
   // a pair with a non-flip O gets no shared drive
   const cells = defaultCells();

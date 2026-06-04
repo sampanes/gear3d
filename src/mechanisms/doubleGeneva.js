@@ -14,8 +14,9 @@ import { doubleGenevaRocker } from '../kinematics.js';
 import { PALETTE, metal, disc, pin, disposeObject } from '../parts.js';
 
 // A flat bar (pivot at the local origin) with a radial slot cut open at its
-// outer/bottom end, extruded along z and centred on the slot plane.
-function rockerGeometry(wBar, wSlot, yTop, yBot, slotInner, thk) {
+// outer/bottom end, extruded along z and centred on the slot plane. Exported so
+// the SATOR mode can reuse the same slotted star for its geared O-drives.
+export function rockerGeometry(wBar, wSlot, yTop, yBot, slotInner, thk) {
   const s = new THREE.Shape();
   s.moveTo(-wBar / 2, yTop);
   s.lineTo(-wBar / 2, yBot);
