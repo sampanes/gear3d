@@ -189,15 +189,20 @@ function genevaCrossGeo(R, slotW, slotDepth, thk, slotAngles, pocketAngles) {
 // the rim at pin entry, with crank radius a = c·sin(amp). The cross is driven from
 // satorDrivePins (≡ satorFlipStar), so the O-flip stays exact and the pins provably
 // drive it (proven in kinematics.test.js), no longer just visually aligned.
-function buildGearedDrive(p1, p2, oPivots, cell, thickness, gi) {
+function buildGearedDrive(p1, p2, oPivots, cell, thickness, gi, drive) {
   const g = new THREE.Group();
   const mid = p1.clone().add(p2).multiplyScalar(0.5);
   const d = Math.max(p1.distanceTo(mid), 1);
-  const amp = Math.PI / 8; // cross rock half-swing (±22.5°)
+  // KNOBS (config.sator.drive). The step-up ratio sets the cross swing amp = π/(4·ratio):
+  // a taller ratio = a smaller cross rock for the SAME 90° tile flip (legibility-locked, see
+  // kinematics.satorFlipRock). Driver teeth + pressure angle are free (they don't touch the
+  // proven cross angle). The SAME amp is fed to the flip tiles so the gear teeth stay meshed.
+  const ratio = drive.ratio;
+  const amp = Math.PI / (4 * ratio); // cross rock half-swing; ratio 2 → ±22.5°
   const Zo = 12;
-  const Zs = 24; // 2:1 step-up (output gear : O gear)
+  const Zs = Math.round(ratio * Zo); // R:1 step-up (output gear : O gear), integer tooth count
   const m = (2 * d) / (Zs + Zo); // module so the pitch circles meet at distance d
-  const pa = 20;
+  const pa = drive.pressureAngle;
   const gt = thickness * 0.5;
   const zBack = -thickness * (1.3 + gi * 0.5); // behind the board plate, each pair its own plane
 
@@ -215,7 +220,12 @@ function buildGearedDrive(p1, p2, oPivots, cell, thickness, gi) {
   // a distance c below the cross so the slots line up with the crank pins exactly.
   const Rs = (m * Zs) / 2;
   const Rm = Rs * 0.72; // driven cross rim radius
-  const Zd = 10;
+  // driver teeth: guard so the driver pitch radius rd stays below c = Rm/cos(amp). Above that
+  // the two drivers can't both mesh (centres 2·rd apart) AND sit a real depth H below the cross
+  // (H = √(c²−rd²) would go imaginary) — so a too-large request is clamped to what fits.
+  const c = Rm / Math.cos(amp);
+  const ZdMax = Math.max(6, Math.floor((2 * 0.98 * c) / m));
+  const Zd = Math.min(Math.max(Math.round(drive.driverTeeth), 6), ZdMax);
   const rd = (m * Zd) / 2; // driver pitch radius (centres 2·rd apart -> meshed)
   const geom = satorDriveGeometry(Rm, rd, amp);
   const pinR = cell * 0.035;
@@ -240,6 +250,15 @@ function buildGearedDrive(p1, p2, oPivots, cell, thickness, gi) {
   // push — see kinematics.satorCamGeometry, which proves both dwells lock and every push clears.
   const dz = -gt - gt * 0.9 - thickness * 0.16; // driver plane, behind the cross
   const cg = satorCamGeometry(geom);
+  // The two drivers form an external meshing pair (centres 2·rd apart). Their gw rotation is
+  // pinned by the engagement (satorDriverAngle) because gw carries the crank pin + cam, so we
+  // can't phase the whole gear — instead we phase ONLY driver-2's TOOTH MESH (a child of gw),
+  // leaving its pin + cam exactly where the proven kinematics put them. Since the two slot-rest
+  // angles satisfy σ_A+σ_B = −π, the interlock phase reduces to mod(π − P/2, P): a half-tooth
+  // for EVEN Zd (which would otherwise render tooth-on-tooth), zero for odd. φ cancels (the two
+  // ±2φ terms meet at the contact line), so this static offset interlocks the teeth at all φ.
+  const pitchD = TAU / Zd;
+  const driverMeshPhase = mod(Math.PI - pitchD / 2, pitchD);
   const gears = [];
   for (const which of [1, 2]) {
     const D = which === 1 ? geom.D1 : geom.D2;
@@ -247,6 +266,7 @@ function buildGearedDrive(p1, p2, oPivots, cell, thickness, gi) {
     gw.position.set(D[0], D[1], 0);
     const gear = makeGear({ module: m, teeth: Zd, pressureAngle: pa }, which === 1 ? PALETTE.driver : PALETTE.driven, { thickness: gt });
     gear.position.z = dz;
+    if (which === 2) gear.rotation.z = driverMeshPhase; // interlock the two meshed driver gears (tooth-in-gap)
     const camGeo = new THREE.CylinderGeometry(cg.camR, cg.camR, gt * 0.8, 24, 1, false, cg.thetaStart, cg.thetaLength);
     camGeo.rotateX(Math.PI / 2); // gap centred on local +x (angle 0) = where the pin sits
     const cam = new THREE.Mesh(camGeo, metal(PALETTE.lock, { rough: 0.6, metalness: 0.4 }));
@@ -256,7 +276,7 @@ function buildGearedDrive(p1, p2, oPivots, cell, thickness, gi) {
     gears.push(gw);
   }
 
-  return { group: g, star, gears, geom };
+  return { group: g, star, gears, geom, Zd, driverMeshPhase };
 }
 
 export class SatorSquare {
@@ -268,6 +288,12 @@ export class SatorSquare {
     this.indexClicks = p.indexClicks ?? 4; // clicks per tile-turn for index tiles
     this.pushFrac = p.pushFrac ?? 0.62;
     const cells = p.cells ?? defaultCells();
+
+    // O-flip drive knobs (modular). ratio sets the cross swing amp = π/(4·ratio); the SAME amp
+    // drives both the rendered cross and the flip tiles so their gears stay meshed. Defaults
+    // (ratio 2 → amp π/8, 10 driver teeth, 20° PA) reproduce the original drive exactly.
+    this.drive = { ratio: 2, driverTeeth: 10, pressureAngle: 20, ...(p.drive ?? {}) };
+    this.flipAmp = Math.PI / (4 * this.drive.ratio);
 
     // Two carriers that rotate together by Phi: printable holds the board + tile
     // gears, decor holds the letters (excluded from STL, printed separately).
@@ -301,7 +327,7 @@ export class SatorSquare {
             ? { n: this.spinN }
             : behavior === 'index'
               ? { n: this.spinN, clicks: this.indexClicks, pushFrac: this.pushFrac }
-              : { freq: 2, pushFrac: this.pushFrac };
+              : { freq: 2, pushFrac: this.pushFrac, amp: this.flipAmp }; // amp used by 'flip'
         const x = (col - 2) * cell;
         const y = (2 - row) * cell;
 
@@ -340,7 +366,7 @@ export class SatorSquare {
         if (!a || !b || a.behavior !== 'flip' || b.behavior !== 'flip') return;
         const p1 = new THREE.Vector2((c1 - 2) * cell, (2 - r1) * cell);
         const p2 = new THREE.Vector2((c2 - 2) * cell, (2 - r2) * cell);
-        const drive = buildGearedDrive(p1, p2, [a.gearPivot, b.gearPivot], cell, thickness, gi);
+        const drive = buildGearedDrive(p1, p2, [a.gearPivot, b.gearPivot], cell, thickness, gi, this.drive);
         this.printable.add(drive.group);
         this.drives.push(drive);
       });
@@ -371,7 +397,12 @@ export class SatorSquare {
       c.spin + c.index > 0
         ? `\nspin/index winding ${this.spinN} turns/board · ${this.indexClicks} clicks/turn`
         : '';
-    return `SATOR square (5×5)\nupright ×${c.upright}  flip ×${c.flip}  spin ×${c.spin}  index ×${c.index}  fixed ×${c.fixed}${motion}\nupright at 90° detents: ${this.legible ? 'yes' : 'NO'}`;
+    // show the O-flip drive design only when there are driven O's to drive
+    const driveInfo =
+      this.drives.length > 0
+        ? `\nO-drive ${this.drive.ratio}:1 step-up → cross rocks ±${((this.flipAmp * 180) / Math.PI).toFixed(1)}° (O flips 90°)`
+        : '';
+    return `SATOR square (5×5)\nupright ×${c.upright}  flip ×${c.flip}  spin ×${c.spin}  index ×${c.index}  fixed ×${c.fixed}${motion}${driveInfo}\nupright at 90° detents: ${this.legible ? 'yes' : 'NO'}`;
   }
 
   dispose() {

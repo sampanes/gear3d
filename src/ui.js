@@ -93,6 +93,14 @@ export function buildGUI(config, actions, modeNames) {
   sat.add(config.sator, 'indexClicks', 2, 12, 1).name('index clicks/turn').onChange(actions.rebuild);
   sat.add(config.sator, 'drives').name('shared O drives').onChange(actions.rebuild);
 
+  // O-flip drive geometry (modular). The ratio is the gear step-up (output : O gear); it sets
+  // the cross swing amp = π/(4·ratio), so a taller ratio rocks the cross less for the same 90°
+  // O-flip. Driver teeth + pressure angle reshape the drivers without touching the proven motion.
+  const drv = sat.addFolder('Drive (O-flip)');
+  drv.add(config.sator.drive, 'ratio', [1.5, 2, 3, 4]).name('step-up ratio').onChange(actions.rebuild);
+  drv.add(config.sator.drive, 'driverTeeth', 6, 16, 1).name('driver teeth').onChange(actions.rebuild);
+  drv.add(config.sator.drive, 'pressureAngle', 14.5, 25, 0.5).name('pressure angle').onChange(actions.rebuild);
+
   // preset palettes: apply a fresh cells map, refresh the per-cell dropdowns,
   // then rebuild. Manual per-cell edits below override the loaded preset.
   const cellCtrls = [];

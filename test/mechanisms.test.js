@@ -389,6 +389,68 @@ test('SatorSquare: a geared shared drive is rendered per flip corner O-pair', ()
   assert.equal(new SatorSquare({ ...CONFIG.sator, drives: false }).drives.length, 0, 'drives:false → none');
 });
 
+test('SatorSquare: the O-drive ratio is a modular knob (amp = π/(4·ratio)) and the tiles stay in lockstep', () => {
+  const m = new SatorSquare({ ...CONFIG.sator, drive: { ratio: 4, driverTeeth: 8, pressureAngle: 20 } });
+  const amp = Math.PI / 16; // ratio 4 → ±11.25° cross rock
+  near(m.flipAmp, amp, 1e-15, 'flipAmp = π/(4·ratio)');
+  assert.equal(m.drives.length, 2, 'still two corner drives at ratio 4');
+  near(m.drives[0].geom.amp, amp, 1e-15, 'drive geom built at the ratio amp');
+  near(m.drives[0].geom.a / m.drives[0].geom.c, Math.sin(amp), 1e-12, 'a/c = sin(amp) at ratio 4');
+  // the rendered cross matches the tile-side star at this amp, AND the O-gear (tile) stays meshed
+  // with the output gear: tile psi = π/4 − ratio·cross (the gear relation), for every φ.
+  for (const phi of [0, 0.7, Math.PI / 2, Math.PI, 3.9]) {
+    m.update(phi);
+    const cross = m.drives[0].star.rotation.z;
+    near(cross, satorFlipStar(phi, amp), 1e-12, `cross = satorFlipStar(amp) @${phi}`);
+    const oTile = m.tiles.find((t) => t.behavior === 'flip');
+    near(oTile.gearPivot.rotation.z, Math.PI / 4 - 4 * cross, 1e-12, `tile psi = π/4 − ratio·cross @${phi}`);
+  }
+  // and the O still reads legibly at every detent at this ratio
+  for (let k = 0; k < 4; k++) {
+    m.update((k * Math.PI) / 2);
+    const t = m.tiles.find((x) => x.behavior === 'flip');
+    const world = mod(m.decor.rotation.z + t.letterPivot.rotation.z, TAU);
+    assert.ok(Math.min(world, Math.abs(world - Math.PI), TAU - world) < 1e-6, `O legible at detent ${k} (ratio 4)`);
+  }
+});
+
+test('SatorSquare: an over-large driver-teeth request is clamped so the drive geometry stays valid', () => {
+  const m = new SatorSquare({ ...CONFIG.sator, drive: { ratio: 2, driverTeeth: 100, pressureAngle: 20 } });
+  const g = m.drives[0].geom;
+  assert.ok(g.rd < g.c, `driver radius clamped below c (rd ${g.rd} < c ${g.c})`);
+  assert.ok(Number.isFinite(g.H) && g.H > 0, `drive depth H stays real & positive (H ${g.H})`);
+});
+
+test('SatorSquare: the two meshed driver gears interlock tooth-in-gap (phased so even tooth counts do not clash)', () => {
+  // The drivers are an external pair (centres 2·rd apart). Their gw angles are fixed by the
+  // engagement (pin + cam), so driver-2 gets a static TOOTH-mesh phase. Read the RENDERED
+  // transforms (gw rotation from update + the static child-pivot rotation) and confirm the
+  // teeth interlock at the line of centres — and that WITHOUT the phase an even count clashes.
+  const circDist = (a, b) => { const dd = mod(a - b, 1); return Math.min(dd, 1 - dd); };
+  const renderedToothAngle = (gw) => gw.rotation.z + gw.children[0].rotation.z; // gw[0] = gear pivot
+  for (const ratio of [1.5, 2, 3, 4]) {
+    for (const driverTeeth of [10, 11]) { // 10 = even (the default, the clash case), 11 = odd
+      const m = new SatorSquare({ ...CONFIG.sator, drive: { ratio, driverTeeth, pressureAngle: 20 } });
+      const d = m.drives[0];
+      const pitchD = TAU / d.Zd;
+      // intent: even count needs a half-tooth phase; odd count needs none
+      near(d.driverMeshPhase, d.Zd % 2 === 0 ? pitchD / 2 : 0, 1e-9, `Zd ${d.Zd} interlock phase`);
+      for (const phi of [0, 0.37, Math.PI / 2, 2.6, Math.PI, 4.2]) {
+        m.update(phi);
+        // driver 1 is the reference (toward +x, the D1→D2 line of centres); driver 2 faces back (−x)
+        const f1 = toothPhaseAt(renderedToothAngle(d.gears[0]), 0, d.Zd);
+        const f2 = toothPhaseAt(renderedToothAngle(d.gears[1]), Math.PI, d.Zd);
+        assert.ok(circDist(f2, mod(0.5 - f1, 1)) < 1e-9, `ratio ${ratio} Zd ${d.Zd} @φ=${phi}: drivers clash`);
+        // sanity: the test is sensitive — drop the phase and an EVEN count must clash (~half tooth)
+        if (d.Zd % 2 === 0) {
+          const f2NoPhase = toothPhaseAt(d.gears[1].rotation.z, Math.PI, d.Zd);
+          assert.ok(circDist(f2NoPhase, mod(0.5 - f1, 1)) > 0.49, `Zd ${d.Zd}: un-phased even count should clash`);
+        }
+      }
+    }
+  }
+});
+
 test('SatorSquare honors a custom cells map and rejects illegal behaviors', () => {
   const cells = defaultCells();
   cells[cellKey(0, 0)] = 'flip'; // (0,0) S is symmetric — flip is legal

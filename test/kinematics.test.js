@@ -470,6 +470,27 @@ test('satorFlipRock: O rides the board and rocks 0..90° (board frame), legible 
   near(satorFlipRock(0), Math.PI / 4 - 2 * satorFlipStar(0), 1e-12, 'tile = 2:1 up from star');
 });
 
+test('satorFlipRock: ANY step-up ratio (amp = π/(4·R)) still flips the O 0..90° and reads legibly', () => {
+  // the modular knob: a taller ratio rocks the cross less (smaller amp) for the SAME 90° tile
+  // flip, so the legibility invariant (2·R·amp = π/2) holds for every ratio, not just R = 2.
+  for (const R of [1.5, 2, 3, 4]) {
+    const amp = Math.PI / (4 * R);
+    // tile still dwells 0° (even detents) / 90° (odd) regardless of ratio
+    near(satorFlipRock(0, amp), 0, 1e-9, `R=${R}: Φ=0 → 0°`);
+    near(satorFlipRock(Math.PI / 2, amp), Math.PI / 2, 1e-9, `R=${R}: Φ=90° → 90°`);
+    near(satorFlipRock(Math.PI, amp), 0, 1e-9, `R=${R}: Φ=180° → 0°`);
+    // the cross rocks exactly ±amp (less for a taller ratio)
+    near(satorFlipStar(0, amp), amp, 1e-9, `R=${R}: cross +amp at even detent`);
+    near(satorFlipStar(Math.PI / 2, amp), -amp, 1e-9, `R=${R}: cross −amp at odd detent`);
+    // world orientation reads as O (≡0 or π) at every detent, for every ratio
+    for (let k = 0; k < 4; k++) {
+      const phi = (k * Math.PI) / 2;
+      const world = mod(phi + satorFlipRock(phi, amp), TAU);
+      assert.ok(Math.min(world, Math.abs(world - Math.PI), TAU - world) < 1e-6, `R=${R}: flip legible at detent ${k}`);
+    }
+  }
+});
+
 // --- SATOR O-flip drive: the reciprocating double-Geneva engagement (the "Maltese math") ---
 test('satorDriveGeometry: a/c = sin(amp), slot mouth = rim, drivers mesh (2·rd apart) at distance c, slots face the drivers', () => {
   const amp = Math.PI / 8;
@@ -536,6 +557,19 @@ test('satorDrivePins: reciprocates (pin 1 +amp→−amp, pin 2 −amp→+amp) an
   );
 });
 
+test('satorDrivePins: cross ≡ satorFlipStar(φ, amp) at ANY drive amp (so the rendered O-gear stays meshed)', () => {
+  // the gear-mesh sync invariant: the rendered cross angle must equal the flip tile-side star at
+  // the SAME amp, for every ratio — else the O-gear and output-gear teeth would visibly slip.
+  for (const R of [1.5, 2, 3, 4]) {
+    const amp = Math.PI / (4 * R);
+    const g = satorDriveGeometry(8.64, 5, amp);
+    near(g.amp, amp, 1e-15, `R=${R}: geom carries its amp`);
+    for (const phi of [0, 0.3, 0.8, Math.PI / 2, Math.PI, 4.2]) {
+      near(satorDrivePins(phi, g).cross, satorFlipStar(phi, amp), 1e-12, `R=${R}: cross = satorFlipStar @${phi}`);
+    }
+  }
+});
+
 test('satorDriverAngle: meshed driver gears counter-rotate at ±2φ (two revs/board → 4 pushes/board)', () => {
   const g = satorDriveGeometry(8.64, 5);
   for (const phi of [0.2, 1.0, -0.7, TAU + 0.5]) {
@@ -599,5 +633,34 @@ test('satorCamGeometry: the gap-on-pin cam locks BOTH dwells (100%) and stays wi
       );
     }
     assert.ok(sawPlus && sawMinus && dwellN > 0, 'saw both +amp and −amp dwells');
+  }
+});
+
+test('satorCamGeometry: locks BOTH dwells AND clears the slot across EVERY drive ratio (amp = π/(4·R))', () => {
+  // the cam guarantees depend on amp (gamma = π/2 − amp, gapHalf = 0.6·gamma): a taller ratio
+  // shrinks amp, which only widens the locking margin — but the small-ratio end (amp = 30°) is
+  // the tight case, so sweep the whole UI-exposed ratio set to prove both ends hold.
+  const wrapPi = (x) => Math.atan2(Math.sin(x), Math.cos(x));
+  const rim = 8.64, rd = 5;
+  const slotW = Math.max(rd * 0.035 * 1.25, rim * 0.05);
+  const mouthHalf = Math.asin(Math.min(0.9, slotW / rim));
+  for (const R of [1.5, 2, 3, 4]) {
+    const amp = Math.PI / (4 * R);
+    const g = satorDriveGeometry(rim, rd, amp);
+    const cg = satorCamGeometry(g);
+    assert.ok(cg.gapHalf < cg.gamma, `R=${R}: gapHalf ${cg.gapHalf} < gamma ${cg.gamma} (else a dwell unlocks)`);
+    assert.ok(cg.gapHalf >= mouthHalf, `R=${R}: gapHalf ${cg.gapHalf} clears the slot mouth ${mouthHalf}`);
+    let dwellN = 0;
+    for (let i = 0; i <= 1500; i++) {
+      const phi = (i / 1500) * TAU;
+      const r = satorDrivePins(phi, g);
+      if (r.engaged) continue;
+      dwellN += 1;
+      const which = r.cross > 0 ? cg.locksAtPlus : cg.locksAtMinus;
+      const D = which === 1 ? g.D1 : g.D2;
+      const theta = which === 1 ? r.theta1 : r.theta2;
+      assert.ok(Math.abs(wrapPi(Math.atan2(-D[1], -D[0]) - theta)) > cg.gapHalf, `R=${R}: dwell @φ=${phi.toFixed(2)} UNLOCKED`);
+    }
+    assert.ok(dwellN > 0, `R=${R}: saw dwells`);
   }
 });

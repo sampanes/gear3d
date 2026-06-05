@@ -320,18 +320,25 @@ export function indexUpright(n) {
 }
 
 // SATOR O-flip drive (geared double-Geneva). The O is NOT anti-rotated — it rides
-// the board — so its only correction is a small rock. A double-Geneva "star" rocks
-// ±22.5° (a 45° swing), dwelling at each detent (theta = 2·Φ lands the dwells on
-// the 90° detents); a 2:1 step-up gear turns that into a 0..90° rock of the tile
-// relative to the board. Combined with the board's own 90°/detent, the O reads as
-// a 180° flip-and-hold — upright or inverted, both legible for a symmetric O.
-export function satorFlipStar(phi) {
-  return doubleGenevaRocker(2 * phi, Math.PI / 8).angle; // the driven star, ±22.5°
+// the board — so its only correction is a small rock. A double-Geneva "cross" rocks
+// ±amp (default ±22.5°), dwelling at each detent (theta = 2·Φ lands the dwells on
+// the 90° detents); an R:1 step-up gear turns that into a 0..90° rock of the tile
+// relative to the board. The ratio is not free: R = π/(4·amp), so a SMALLER cross
+// swing just needs a TALLER step-up to still produce the same 90° tile rock — that
+// 90° is the legibility invariant (combined with the board's own 90°/detent, the O
+// reads as a 180° flip-and-hold, upright or inverted, both legible for a symmetric
+// O). amp = π/8 → R = 2 is the classic case; the drive exposes amp via its ratio.
+export function satorFlipStar(phi, amp = Math.PI / 8) {
+  return doubleGenevaRocker(2 * phi, amp).angle; // the driven cross, ±amp (default ±22.5°)
 }
-export function satorFlipRock(phi) {
-  // tile = 2:1 gear up from the star (opposite sign), offset to rock 0..90°:
-  //   star dwells at +22.5° at the even detents -> tile 0°;  -22.5° at the odd -> tile 90°
-  return Math.PI / 4 - 2 * satorFlipStar(phi);
+export function satorFlipRock(phi, amp = Math.PI / 8) {
+  // tile = R:1 gear up from the cross (opposite sign), offset to rock 0..90°:
+  //   the cross dwells at +amp at the even detents -> tile 0°;  -amp at the odd -> tile 90°.
+  // R = π/(4·amp) keeps the tile swing EXACTLY 90° (2·R·amp = π/2) for ANY amp, so the O still
+  // reads upright at every 90° detent — the legibility invariant that pins amp to the ratio.
+  // amp = π/8 → R = 2 (the classic 2:1), recovering the original byte-for-byte.
+  const R = Math.PI / (4 * amp);
+  return Math.PI / 4 - R * satorFlipStar(phi, amp);
 }
 
 // SATOR O-flip drive — the reciprocating double-Geneva ENGAGEMENT (the "Maltese math").
@@ -441,8 +448,10 @@ export function satorTileAngle(behavior, phi, params = {}) {
       return spinAngle(phi, params.n ?? 4);
     case 'index': // single-Geneva stepped spin; psi = absolute - board angle
       return indexAbsolute(phi, params.n ?? 4, params.clicks ?? 4, params.pushFrac ?? 0.5) - phi;
-    case 'flip': // O rides the board; the geared double-Geneva rocks it 0..90° (board frame)
-      return satorFlipRock(phi);
+    case 'flip': // O rides the board; the geared double-Geneva rocks it 0..90° (board frame).
+      // params.amp = π/(4·ratio) keeps the tile-side rock in lockstep with the rendered drive's
+      // cross (same amp), so the O-gear and output-gear teeth stay meshed; default π/8 (ratio 2).
+      return satorFlipRock(phi, params.amp ?? Math.PI / 8);
     default:
       throw new Error(`unknown SATOR tile behavior: ${behavior}`);
   }

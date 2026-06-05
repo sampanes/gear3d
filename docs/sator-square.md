@@ -177,15 +177,19 @@ board**, and a small drive supplies only the correction. The drive is a
   correction may go *either* direction).
 - So the drive rocks the O **90°** (board frame); with the board's own
   90°/detent that is a **180° flip-and-hold** in the world frame.
-- Via the **2:1** gear the **cross rocks 45° (±22.5°)** to produce the O's 90°.
-  Chain: **cross 45° → O 90° (board) → 180° world flip.** The O reads at every
-  detent because it sits at 0° or 180° there.
+- Via the **R:1** step-up gear (default **2:1**) the **cross rocks ±amp** to
+  produce the O's 90°, with `amp = π/(4·R)`. Chain: **cross 2·amp → O 90° (board)
+  → 180° world flip.** The O reads at every detent because it sits at 0° or 180°
+  there — and that 90° is preserved for *any* `R` because `R·amp = π/4` always (a
+  taller step-up just rocks the cross less for the same flip; see *Adjustable*).
 
 ### Code
 
-- `kinematics.satorFlipStar(Φ)` / `satorFlipRock(Φ)` — the cross rock (±22.5°,
-  `doubleGenevaRocker(2Φ, π/8)`) and the O's 0..90° rock (`π/4 − 2·satorFlipStar`);
-  `satorTileAngle('flip')` returns the latter.
+- `kinematics.satorFlipStar(Φ, amp=π/8)` / `satorFlipRock(Φ, amp=π/8)` — the cross
+  rock (±amp, `doubleGenevaRocker(2Φ, amp)`) and the O's 0..90° rock
+  (`π/4 − R·satorFlipStar` with `R = π/(4·amp)`, so the tile swings exactly 90° for
+  any amp); `satorTileAngle('flip', …, {amp})` returns the latter. Both default to
+  amp = π/8 (R = 2), reproducing the original byte-for-byte.
 - `kinematics.satorDriveGeometry(rim, rd, amp)` — the solved static geometry:
   centre distance `c`, crank radius `a`, driver depth `H`, the two slot rest angles
   `σ_A,σ_B`, the two cam-pocket angles, and the slot-bottom radius.
@@ -198,7 +202,30 @@ board**, and a small drive supplies only the correction. The drive is a
   `γ·0.6`) that the render feeds straight to a `CylinderGeometry`.
 - `mechanisms/satorSquare.js` — `genevaCrossGeo` (the 2-slot/2-pocket cross, with
   the slot & pocket angles passed in) and `buildGearedDrive` (cross + output gear +
-  two meshed cam-and-pin drivers, all placed from `satorDriveGeometry`).
+  two meshed cam-and-pin drivers, all placed from `satorDriveGeometry`). The two
+  drivers are a real external pair, so driver-2's **tooth mesh** carries a static
+  interlock phase `mod(π − P/2, P)` (`P = 2π/Z_d`) — a half-tooth for even `Z_d`,
+  zero for odd — applied to the *gear only*, never the pin/cam (those stay where
+  the engagement puts them). Without it an even driver-tooth count renders
+  tooth-on-tooth (a fidelity bug the completeness critic caught).
+
+### Adjustable (modular)
+
+The drive is a `config.sator.drive` block — knobs that keep every proof intact:
+
+- **`ratio`** (1.5 / 2 / 3 / 4) — the output:O step-up `R`. It sets the cross swing
+  `amp = π/(4·R)`; a taller `R` rocks the cross *less* for the same 90° O-flip.
+  Legibility is preserved **by construction** (`R·amp = π/4`), and the *same* amp
+  feeds both the rendered cross and the flip tiles, so the O-gear and output-gear
+  teeth never slip. `Z_s = R·12` stays an exact integer for all four values.
+- **`driverTeeth`** (6–16) — reshapes the drivers; clamped to keep `r_d < c` so the
+  depth `H = √(c²−r_d²)` stays real (an over-large request is reduced, not broken).
+- **`pressureAngle`** (14.5–25°) — drive tooth shape; applied to both meshing gears.
+
+These never touch the proven cross angle (`amp` only), the pin-on-centerline
+engagement, or the cam lock — verified across the whole knob range by an
+adversarial workflow (four invariant-breakers + a completeness critic) and by
+unit tests that sweep every ratio.
 
 ### How we got here (brief)
 
