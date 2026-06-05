@@ -25,69 +25,178 @@ export function gearMetrics({ module: m, teeth: z, pressureAngle = 20 }) {
   return { m, z, alpha, r, rb, ra, rf };
 }
 
-// Outer contour of the gear as an array of THREE.Vector2, wound CCW, closed.
-export function gearContour(params, stepsPerFlank = 14) {
-  const { z, alpha, r, rb, ra, rf } = gearMetrics(params);
-  const pitch = TAU / z;
+// Per-tooth sampling resolution for the root fillet + land.
+const TIP_STEPS = 4;
+const K_FILLET = 8; // trochoid samples per flank (each gap gets two — one each side)
+const LAND_STEPS = 4; // flat root-land samples
+
+// Trochoidal root-fillet geometry for an external gear (see docs/fillet-design.md).
+// The sharp corner of the basic rack — a depth b below the pitch line, offset L
+// to the side of the space centre — traces a trochoid as the gear rolls. In the
+// space-centre frame, parameter u = gear roll angle (rad):
+//   X  = rf            constant radial line of the corner (= r - b)
+//   Lu = L - r*u       lateral position of the corner; 0 at the deepest point
+//   rho        = hypot(X, Lu)
+//   aboutSigma = atan2(X sin u + Lu cos u,  X cos u - Lu sin u)
+// The deepest point (Lu = 0, u = L/r) sits at rho = rf, an angle sigma off the
+// tooth centre — so the two fillets bounding a space leave a flat root land of
+// half-angle L/r centred on the space line. Returns the closures plus the
+// resolved form radius so gearContour and its tests share one source of truth.
+export function rootFilletGeometry(params) {
+  const { m, z, alpha, r, rb, ra, rf } = gearMetrics(params);
   const halfTooth = Math.PI / (2 * z);
   const invAlpha = involute(alpha);
+  const sigma = Math.PI / z; // space (gap) centre line, half a pitch off the tooth centre
 
-  // The involute exists only for rho >= rb, so the flank starts at the larger of
-  // the base circle and the root circle:
-  //   rf < rb  (low tooth counts): flanks start at rb; the [rf, rb] gap is
-  //            bridged by a short radial drop to the root land at rf.
-  //   rf >= rb (high tooth counts): flanks start right at the root circle, so
-  //            there is no drop and nothing is drawn below the true dedendum.
-  const rStart = Math.max(rb, rf);
-  const rootR = Math.max(Math.min(rf, rStart), 0.2 * r);
-
+  // involute flank angle off the tooth centre at radius rho (>= rb)
   const psi = (rho) => {
     const ar = Math.acos(Math.min(1, rb / rho));
     return halfTooth + invAlpha - involute(ar);
   };
+  const b = 1.25 * m;
+  const L = (Math.PI * m) / 4 - b * Math.tan(alpha);
+  const X = rf; // = r - b
+  const landHalfAng = Math.max(0, L / r); // flat root-land half-width (rad)
+
+  // rho -> the trochoid's angular offset from the space centre, on the branch
+  // u <= L/r (where rho increases monotonically from rf), inverted in closed form.
+  const aboutSigmaAt = (rho) => {
+    const Lu = Math.sqrt(Math.max(0, rho * rho - X * X));
+    const u = (L - Lu) / r;
+    return Math.atan2(X * Math.sin(u) + Lu * Math.cos(u), X * Math.cos(u) - Lu * Math.sin(u));
+  };
+  // fillet angular offset from the TOOTH centre, leading (+) side:
+  const filletLead = (rho) => sigma - aboutSigmaAt(rho);
+
+  // Form radius rho_form, where the fillet meets the involute flank:
+  //   rf >= rb (high tooth): no involute below rb to fillet into — fall back to
+  //            the flank-from-rf + flat-root simplification (filletEmpty).
+  //   undercut (rf < rb, low z): the trochoid CROSSES the involute above rb;
+  //            rho_form is the largest crossing, the involute below it is cut off.
+  //   otherwise: the fillet reaches the involute origin, rho_form = rb.
+  let filletEmpty = false;
+  let rhoForm;
+  if (rf >= rb) {
+    filletEmpty = true;
+    rhoForm = rf;
+  } else {
+    const g = (rho) => filletLead(rho) - psi(rho); // sign change above rb = undercut crossing
+    const N = 256;
+    let cross = null;
+    let prevG = g(rb);
+    let prevRho = rb;
+    for (let i = 1; i <= N; i++) {
+      const rho = rb + (ra - rb) * (i / N);
+      const gi = g(rho);
+      if ((prevG <= 0) !== (gi <= 0)) cross = [prevRho, rho]; // keep the last (largest-rho) bracket
+      prevRho = rho;
+      prevG = gi;
+    }
+    if (cross) {
+      let [lo, hi] = cross;
+      const loNeg = g(lo) <= 0;
+      for (let k = 0; k < 60; k++) {
+        const mid = (lo + hi) / 2;
+        if ((g(mid) <= 0) === loNeg) lo = mid;
+        else hi = mid;
+      }
+      rhoForm = (lo + hi) / 2;
+    } else {
+      rhoForm = rb;
+    }
+    // Guard #1: never trim above the pitch circle (preserves the pi*m/2 pitch
+    // thickness — psi(r) = halfTooth exactly). Pathological undercuts (e.g.
+    // m6/z8/14.5) push the raw crossing above r; capping at r-eps is the safe degrade.
+    rhoForm = Math.min(rhoForm, r - 1e-6);
+    // A crossing essentially at rb is just the non-undercut origin.
+    if (rhoForm < rb) rhoForm = rb;
+  }
+  const undercut = !filletEmpty && rhoForm > rb + 1e-6;
+  return { psi, aboutSigmaAt, filletLead, sigma, landHalfAng, rhoForm, filletEmpty, undercut, rb, rf, r, ra };
+}
+
+// Outer contour of the gear as an array of THREE.Vector2, wound CCW, closed.
+// The root is a true rack-generated trochoidal fillet (see rootFilletGeometry):
+// it replaces the old flat-root-land + radial-wall simplification, and on
+// low-tooth pinions it correctly CROSSES the involute (undercut), cutting the
+// flank away above the form circle.
+export function gearContour(params, stepsPerFlank = 14) {
+  const { z, ra, rf } = gearMetrics(params);
+  const pitch = TAU / z;
+  const { psi, aboutSigmaAt, filletLead, sigma, landHalfAng, rhoForm, filletEmpty } =
+    rootFilletGeometry(params);
 
   const pts = [];
-  const push = (rho, ang) =>
-    pts.push(new THREE.Vector2(rho * Math.cos(ang), rho * Math.sin(ang)));
+  const push = (rho, ang) => pts.push(new THREE.Vector2(rho * Math.cos(ang), rho * Math.sin(ang)));
 
-  const psiBase = psi(rStart);
   const psiTip = psi(ra);
+  // Guard #3: a vanishingly thin land (very high tooth count) collapses to one
+  // vertex so its samples don't pile into zero-length edges.
+  const landCollapse = !filletEmpty && 2 * landHalfAng <= 1e-9;
 
   for (let i = 0; i < z; i++) {
     const c = i * pitch; // tooth centre line
 
-    // up the trailing (-) flank, base -> tip
-    for (let k = 0; k <= stepsPerFlank; k++) {
-      const rho = rStart + (ra - rStart) * (k / stepsPerFlank);
+    if (filletEmpty) {
+      // High tooth count (rf >= rb): the original simplification — flank starts
+      // at the root circle, flat root land spans the whole gap, no fillet.
+      const psiBase = psi(rf);
+      for (let k = 0; k <= stepsPerFlank; k++) {
+        const rho = rf + (ra - rf) * (k / stepsPerFlank);
+        push(rho, c - psi(rho));
+      }
+      for (let k = 1; k <= TIP_STEPS; k++) push(ra, c - psiTip + 2 * psiTip * (k / TIP_STEPS));
+      for (let k = stepsPerFlank - 1; k >= 0; k--) {
+        const rho = rf + (ra - rf) * (k / stepsPerFlank);
+        push(rho, c + psi(rho));
+      }
+      const a0 = c + psiBase;
+      const a1 = c + pitch - psiBase;
+      const rootSteps = 5;
+      for (let k = 1; k <= rootSteps - 1; k++) push(rf, a0 + (a1 - a0) * (k / rootSteps));
+      continue;
+    }
+
+    // Fillet present. Emit CCW; each segment emits its START vertex + interior
+    // but NOT its end (the next segment owns that), so no vertex is duplicated:
+    //
+    // (0) trailing (-) fillet: rf -> rho_form, climbing out of the gap the
+    //     PREVIOUS tooth's land opened. Its start (rf) is that land's far end.
+    for (let k = 0; k < K_FILLET; k++) {
+      const rho = rf + (rhoForm - rf) * (k / K_FILLET);
+      push(rho, c - sigma + aboutSigmaAt(rho));
+    }
+    // (a) trailing (-) flank: rho_form -> ra (skip ra; the tip arc owns it)
+    for (let k = 0; k < stepsPerFlank; k++) {
+      const rho = rhoForm + (ra - rhoForm) * (k / stepsPerFlank);
       push(rho, c - psi(rho));
     }
-    // tip arc, -psiTip -> +psiTip
-    const tipSteps = 4;
-    for (let k = 1; k <= tipSteps; k++) {
-      push(ra, c - psiTip + 2 * psiTip * (k / tipSteps));
-    }
-    // down the leading (+) flank, tip -> base (start one step in: the tip arc
-    // already emitted the rho=ra vertex, so re-emitting it makes a zero-length edge)
-    for (let k = stepsPerFlank - 1; k >= 0; k--) {
-      const rho = rStart + (ra - rStart) * (k / stepsPerFlank);
+    // (b) tip arc: -psiTip -> +psiTip (skip the far end; the leading flank owns it)
+    for (let k = 0; k < TIP_STEPS; k++) push(ra, c - psiTip + 2 * psiTip * (k / TIP_STEPS));
+    // (c) leading (+) flank: ra -> rho_form INCLUSIVE. The FLANK (not the fillet)
+    //     must own the rho_form vertex: when a severe undercut clamps rho_form to
+    //     r-eps (guard #1), this keeps the pitch circle sitting on the involute,
+    //     so the pi*m/2 tooth thickness survives. The trailing flank (a) already
+    //     owns its rho_form, so both flanks are symmetric.
+    for (let k = 0; k <= stepsPerFlank; k++) {
+      const rho = ra - (ra - rhoForm) * (k / stepsPerFlank);
       push(rho, c + psi(rho));
     }
-    // radial drop into the root (only when the root sits below the flank base),
-    // then the root arc across the gap toward the next tooth.
-    if (rootR < rStart) push(rootR, c + psiBase);
-    const a0 = c + psiBase;
-    const a1 = c + pitch - psiBase;
-    const rootSteps = 5;
-    // When the root land is at the flank base (rf >= rb, no drop), the final arc
-    // vertex at a1 coincides with the next tooth's flank start, so stop one short
-    // of it; otherwise emit it as the base of the radial wall back up to the flank.
-    const lastRootK = rootR < rStart ? rootSteps : rootSteps - 1;
-    for (let k = 1; k <= lastRootK; k++) {
-      push(rootR, a0 + (a1 - a0) * (k / rootSteps));
+    // (d) leading (+) fillet: rho_form -> rf, INTERIOR only (the flank owns
+    //     rho_form, the root land owns rf).
+    for (let k = 1; k < K_FILLET; k++) {
+      const rho = rhoForm - (rhoForm - rf) * (k / K_FILLET);
+      push(rho, c + filletLead(rho));
     }
-    // The climb back to the flank base at a1 is supplied by the next tooth's
-    // first trailing-flank vertex (and by the Shape auto-close on the last
-    // tooth), so emitting it here would just duplicate that vertex.
+    // (e) flat root land at rf, centred on the space line c+sigma (skip the far
+    //     end; the next tooth's trailing fillet owns it as its start).
+    if (landCollapse) {
+      push(rf, c + sigma);
+    } else {
+      for (let k = 0; k < LAND_STEPS; k++) {
+        push(rf, c + sigma - landHalfAng + 2 * landHalfAng * (k / LAND_STEPS));
+      }
+    }
   }
   return pts;
 }
