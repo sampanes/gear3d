@@ -15,6 +15,14 @@ much as the live 3D demo.
 | 6 | Visual upgrade | ✅ done | Procedural studio reflections (`RoomEnvironment` via `PMREMGenerator` — no external HDR asset), shadow-only back wall (`ShadowMaterial`), ACES filmic tone-mapping, richer metals (`src/scene.js`). |
 | 7 | SATOR square mode | ✅ done | A 5×5 turning-letter wall piece (`src/mechanisms/satorSquare.js`), the **SATOR square** mode. Tile behaviors upright / flip / spin / **index (clicking)** / fixed; per-cell editor + presets; printable/decor STL split; and a rendered **geared O-flip drive** — a double-Geneva *reciprocating* cross whose **pin-in-slot engagement is now fully derived & unit-tested**, with **adjustable drive knobs** (step-up ratio → cross swing, driver teeth, pressure angle) that keep legibility, the mesh, and the cam lock provably intact across their whole range. Design in [sator-square.md](sator-square.md). |
 
+## Next (design only)
+
+- **Per-cell modular drive + cohesion solver** — Tier 2 of the *modular, adjustable
+  SATOR planner* goal: swap an individual cell's drive **mechanism** (e.g. an outer
+  ring gear on the E tiles) and keep the whole square cohesive via a constraint
+  solver, or flag what breaks + suggest the fix. Design spec (not yet implemented):
+  [sator-modular-drive.md](sator-modular-drive.md).
+
 ## Out of scope
 
 - **Share & presets** (URL config / save-load) — intentionally not pursued.
