@@ -58,14 +58,17 @@ export function saveSTL(object, filename = 'gear3d.stl', scale = 1) {
 // ---------------------------------------------------------------------------
 const entryName = (p) => `${p.name}${(p.count ?? 1) > 1 ? `-x${p.count}` : ''}.stl`;
 
-export function partsZipBytes(parts, scale = 1) {
+export function partsZipBytes(parts, scale = 1, notes = []) {
   const size = new Vector3();
   const dims = []; // per-part printed bounding box, for the manifest
   const entries = parts.map((p) => {
     // fresh objects have never been rendered, so their child matrices are
     // stale — bake them before serialising or every child lands at the origin
     p.object.updateMatrixWorld(true);
-    new Box3().setFromObject(p.object).getSize(size);
+    // precise=true measures transformed VERTICES — the default transforms each
+    // child's local AABB instead, overestimating rotated children (e.g. the
+    // phase-clocked driver-b gear would report 23.6mm for an 18.9mm part)
+    new Box3().setFromObject(p.object, true).getSize(size);
     dims.push(`${(size.x * scale).toFixed(1)} x ${(size.y * scale).toFixed(1)} x ${(size.z * scale).toFixed(1)} mm`);
     return { name: entryName(p), data: stlBytes(p.object, scale) };
   });
@@ -80,6 +83,7 @@ export function partsZipBytes(parts, scale = 1) {
     'The -xN suffix is the print quantity, not a size. Gear teeth already',
     'include whatever backlash the design was exported with; print at 100%.',
     'Check the largest part against your print bed before slicing.',
+    ...(notes.length > 0 ? ['', ...notes] : []),
     '',
   ].join('\n');
   entries.unshift({ name: 'README.txt', data: new TextEncoder().encode(manifest) });
@@ -87,8 +91,8 @@ export function partsZipBytes(parts, scale = 1) {
 }
 
 // Serialise a parts kit and trigger a browser download of the ZIP.
-export function savePartsZip(parts, filename = 'gear3d-parts.zip', scale = 1) {
+export function savePartsZip(parts, filename = 'gear3d-parts.zip', scale = 1, notes = []) {
   if (!parts || parts.length === 0) return;
-  const data = partsZipBytes(parts, scale);
+  const data = partsZipBytes(parts, scale, notes);
   download(new Blob([data], { type: 'application/zip' }), filename.endsWith('.zip') ? filename : `${filename}.zip`);
 }

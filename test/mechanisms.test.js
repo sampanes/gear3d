@@ -499,7 +499,13 @@ test('SATOR parts(): the default board yields the full print kit with true count
 
   const byName = Object.fromEntries(parts.map((p) => [p.name, p]));
   assert.equal(byName['plate'].count, 1);
-  assert.equal(byName['tile-disc'].count, 25);
+  // assembly v1: 21 standard-boss discs (upright/spin/fixed) + 2 long-boss
+  // variants per driven corner pair, and a retainer cap for every standard
+  // tile except the glued centre hub
+  assert.equal(byName['tile-disc'].count, 21);
+  assert.equal(byName['tile-disc-flip-a'].count, 2);
+  assert.equal(byName['tile-disc-flip-b'].count, 2);
+  assert.equal(byName['tile-cap'].count, 20);
   // SATOR/AREPO/TENET/OPERA/ROTAS letter census
   const letters = { S: 2, A: 4, T: 4, O: 4, R: 4, E: 4, P: 2, N: 1 };
   for (const [ch, n] of Object.entries(letters)) assert.equal(byName[`letter-${ch}`].count, n, `letter ${ch}`);
@@ -510,8 +516,8 @@ test('SATOR parts(): the default board yields the full print kit with true count
   // the two meshed drivers are different printed parts (a/b variants)
   assert.equal(byName['drive-driver-a'].count, 2);
   assert.equal(byName['drive-driver-b'].count, 2);
-  assert.equal(parts.length, 2 + 8 + 5, 'kit entries: plate + disc + 8 glyphs + 5 drive kinds');
-  assert.equal(parts.reduce((s, p) => s + p.count, 0), 63, 'total physical pieces');
+  assert.equal(parts.length, 5 + 8 + 5, 'kit entries: plate + 3 disc kinds + cap + 8 glyphs + 5 drive kinds');
+  assert.equal(parts.reduce((s, p) => s + p.count, 0), 83, 'total physical pieces');
 
   // every part serialises to a real, non-empty binary STL
   for (const p of parts) {
@@ -629,6 +635,53 @@ test('SATOR cross: the slot floor clears the pin SURFACE, not just its centre (p
     floorR <= d.geom.slotBottom - d.spec.pinR,
     `slot floor (r=${floorR.toFixed(3)}) must clear the pin surface (${(d.geom.slotBottom - d.spec.pinR).toFixed(3)})`
   );
+  m.dispose();
+});
+
+test('SATOR assembly v1: bosses, plate holes, and bores are mutually consistent (self-jigging kit)', () => {
+  const m = new SatorSquare(CONFIG.sator);
+  const parts = m.parts();
+  const byName = Object.fromEntries(parts.map((p) => [p.name, p]));
+  const t = CONFIG.sator.thickness;
+  const cell = CONFIG.sator.cell;
+  const bossR = cell * 0.1; // unclamped at the default sizes
+  const fit = 0.25; // SatorSquare default
+  const glue = 0.1;
+
+  const minDistTo = (object, cx, cy) => {
+    object.updateMatrixWorld(true);
+    let min = Infinity;
+    object.traverse((node) => {
+      if (!node.geometry) return;
+      const pos = node.geometry.attributes.position;
+      for (let i = 0; i < pos.count; i++) min = Math.min(min, Math.hypot(pos.getX(i) - cx, pos.getY(i) - cy));
+    });
+    return min;
+  };
+
+  // plate: a clearance hole of radius bossR + fit at every tile centre
+  near(minDistTo(byName['plate'].object, -2 * cell, 2 * cell), bossR + fit, 1e-3, 'corner tile hole');
+  near(minDistTo(byName['plate'].object, 0, 0), bossR + fit, 1e-3, 'centre hub hole');
+
+  // boss lengths are self-jigging: the standard boss spans gap + plate + cap
+  // protrusion; a flip boss tip lands on the O-gear back face at zBack(gi)−gt/2
+  const zMin = (o) => {
+    o.updateMatrixWorld(true);
+    return new THREE.Box3().setFromObject(o).min.z;
+  };
+  near(zMin(byName['tile-disc'].object), -t / 2 - (0.1 + 0.6 * t + 2), 1e-5, 'standard boss');
+  near(zMin(byName['tile-disc-flip-a'].object), -t / 2 - (0.1 + 1.3 * t), 1e-5, 'flip boss reaches drive plane a');
+  near(zMin(byName['tile-disc-flip-b'].object), -t / 2 - (0.1 + 1.8 * t), 1e-5, 'flip boss reaches drive plane b');
+
+  // O-gear glue bore takes the boss; the cap washer glues over the boss end
+  near(minDistTo(byName['o-tile-gear'].object, 0, 0), bossR + glue, 1e-3, 'O-gear glue bore');
+  near(minDistTo(byName['tile-cap'].object, 0, 0), bossR + glue, 1e-3, 'cap bore');
+
+  // the fit knob actually reaches the plate hole
+  const loose = new SatorSquare({ ...CONFIG.sator, fit: 0.5 });
+  const lp = loose.parts().find((p) => p.name === 'plate').object;
+  near(minDistTo(lp, -2 * cell, 2 * cell), bossR + 0.5, 1e-3, 'fit knob widens the holes');
+  loose.dispose();
   m.dispose();
 });
 

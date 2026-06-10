@@ -97,6 +97,8 @@ export function buildGUI(config, actions, modeNames) {
   sat.add(config.sator, 'spinN', 1, 8, 1).name('turns/board (spin·index)').onChange(actions.rebuild);
   sat.add(config.sator, 'indexClicks', 2, 12, 1).name('index clicks/turn').onChange(actions.rebuild);
   sat.add(config.sator, 'drives').name('shared O drives').onChange(actions.rebuild);
+  // radial clearance for the print kit's running fits (tile boss in plate hole)
+  sat.add(config.sator, 'fit', 0.1, 0.6, 0.05).name('print fit (mm)').onChange(actions.rebuild);
 
   // O-flip drive geometry (modular). The ratio is the gear step-up (output : O gear); it sets
   // the cross swing amp = π/(4·ratio), so a taller ratio rocks the cross less for the same 90°

@@ -29,7 +29,7 @@ const config = {
   internal: { module: 4, pinionTeeth: 12, ringTeeth: 48, pressureAngle: 20, thickness: 8, backlash: 0 },
   planetary: { module: 4, sunTeeth: 12, planetTeeth: 12, planets: 3, pressureAngle: 20, thickness: 8, fixed: 'ring', backlash: 0 },
   bevel: { module: 4, pinionTeeth: 16, gearTeeth: 24, pressureAngle: 20, faceWidth: 14, backlash: 0 },
-  sator: { cell: 40, thickness: 6, spinN: 4, indexClicks: 4, pushFrac: 0.62, drives: true, preset: 'Default', cells: defaultCells(), drive: { ratio: 2, driverTeeth: 10, pressureAngle: 20, backlash: 0 } },
+  sator: { cell: 40, thickness: 6, spinN: 4, indexClicks: 4, pushFrac: 0.62, drives: true, preset: 'Default', cells: defaultCells(), fit: 0.25, drive: { ratio: 2, driverTeeth: 10, pressureAngle: 20, backlash: 0 } },
   export: { scale: 1.0 }, // uniform STL multiplier; model units are mm
 };
 
@@ -127,7 +127,7 @@ const actions = {
       // per-part kit: one ZIP of laid-flat STLs (print-pose builds, never the
       // live scene), plus a README manifest with quantities
       const parts = mechanism.parts();
-      savePartsZip(parts, `gear3d-${name}${tag}-parts.zip`, s);
+      savePartsZip(parts, `gear3d-${name}${tag}-parts.zip`, s, mechanism.printNotes ? mechanism.printNotes() : []);
       parts.forEach((p) => disposeObject(p.object)); // fresh builds — free them
     } else {
       // mechanism has no per-part split (yet): same as the single-file export

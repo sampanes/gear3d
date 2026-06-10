@@ -118,6 +118,14 @@ test('partsZipBytes bakes fresh-object child transforms (updateMatrixWorld befor
   assert.ok(Math.abs(maxX - 11) < 1e-5, `offset child baked into the STL (maxX ${maxX})`);
 });
 
+test('partsZipBytes appends mechanism assembly notes to the README', () => {
+  const entries = zipEntries(
+    partsZipBytes([{ name: 'p', count: 1, object: boxGroup(10) }], 1, ['glue the cap', 'mind the gap'])
+  );
+  const manifest = new TextDecoder().decode(entries[0].data);
+  assert.match(manifest, /glue the cap\nmind the gap/, 'notes land verbatim in the manifest');
+});
+
 test('partsZipBytes applies the uniform export scale to every part', () => {
   const mk = (s) => zipEntries(partsZipBytes([{ name: 'p', count: 1, object: boxGroup(10) }], s));
   const at1 = mk(1).find((e) => e.name === 'p.stl');

@@ -12,8 +12,14 @@
 import * as THREE from 'three';
 import { satorTileAngle, indexUpright, satorDriveGeometry, satorDrivePins, satorCamGeometry } from '../kinematics.js';
 import { makeGear } from '../gears/gear.js';
+import { gearMetrics } from '../gears/involute.js';
 import { TAU, mod } from '../math.js';
 import { PALETTE, metal, disc, pin, disposeObject } from '../parts.js';
+
+// The two diagonal corner O-pairs (point-symmetric through the centre, so one
+// shaft drives both tiles of a pair). Shared by the ctor's drive builder and by
+// parts(), which must know which flip tiles a built drive actually covers.
+const CLUSTERS = [[[0, 3], [1, 4]], [[3, 0], [4, 1]]];
 
 export const SATOR_WORD = ['SATOR', 'AREPO', 'TENET', 'OPERA', 'ROTAS'];
 
@@ -306,7 +312,7 @@ function buildGearedDrive(p1, p2, oPivots, cell, thickness, gi, drive) {
 
   // `spec` records everything parts() needs to rebuild this drive's bodies in
   // print pose (fresh geometry, not the live scene meshes).
-  const spec = { m, Zo, Zs, Zd, pa, gt, Rm, slotW, floorExtra, geom, cg, pinR, bl };
+  const spec = { gi, m, Zo, Zs, Zd, pa, gt, Rm, slotW, floorExtra, geom, cg, pinR, bl };
   return { group: g, star, gears, geom, Zd, driverMeshPhase, spec };
 }
 
@@ -315,6 +321,7 @@ export class SatorSquare {
     this.group = new THREE.Group();
     const cell = (this.cell = p.cell ?? 40);
     const thickness = (this.thickness = p.thickness ?? 6);
+    this.fit = p.fit ?? 0.25; // radial running clearance for printed fits (boss-in-hole)
     this.spinN = p.spinN ?? 4; // turns per board revolution for spin AND index tiles
     this.indexClicks = p.indexClicks ?? 4; // clicks per tile-turn for index tiles
     this.pushFrac = p.pushFrac ?? 0.62;
@@ -390,7 +397,6 @@ export class SatorSquare {
     this.drives = [];
     if (p.drives !== false) {
       const tileAt = (r, c) => this.tiles.find((t) => t.row === r && t.col === c);
-      const CLUSTERS = [[[0, 3], [1, 4]], [[3, 0], [4, 1]]]; // the two corner O-pairs
       CLUSTERS.forEach(([[r1, c1], [r2, c2]], gi) => {
         const a = tileAt(r1, c1);
         const b = tileAt(r2, c2);
@@ -447,12 +453,94 @@ export class SatorSquare {
   parts() {
     const cell = this.cell;
     const t = this.thickness;
+    const fit = this.fit;
+    const glue = 0.1; // radial gap for glued joints (vs `fit` for running fits)
     const out = [];
 
-    // the board plate and the 25 identical tile discs
-    const plate = new THREE.Mesh(new THREE.BoxGeometry(cell * 5, cell * 5, t * 0.6), metal(PALETTE.shaft));
-    out.push({ name: 'plate', count: 1, object: plate });
-    out.push({ name: 'tile-disc', count: 25, object: disc(cell * 0.44, t, PALETTE.output) });
+    // --- tile mounting (assembly v1) -------------------------------------
+    // Every disc carries an integral rear BOSS riding a plate clearance hole
+    // (running fit). Non-driven tiles take a glued tile-cap washer behind the
+    // plate; the centre N's boss is glued (it IS the fixed hub). Flip tiles
+    // get a LONG boss reaching their drive's z-plane and glue the o-tile-gear
+    // flush onto its end — the gear doubles as the retainer AND lands exactly
+    // on its mesh plane (self-jigging). Drive shaft mounting is M3b (the
+    // driver axes pass through the spinning output gear's disk, so shafts
+    // need the rear-bracket + collision model — see roadmap).
+    const tileR = cell * 0.44;
+    let bossR = cell * 0.1;
+    if (this.drives.length > 0) {
+      // the boss must fit inside the O-gear's glued bore, which must stay
+      // inside the gear web (the same 0.6·rf ceiling the other bores use)
+      const rfO = gearMetrics({ module: this.drives[0].spec.m, teeth: this.drives[0].spec.Zo }).rf;
+      bossR = Math.min(bossR, rfO * 0.6 - glue);
+    }
+    const holeR = bossR + fit;
+
+    // exact-closure circle points (absarc's 2π seam leaves sliver vertices)
+    const ring = (rr, cw, n = 32) => {
+      const ps = [];
+      for (let k = 0; k < n; k++) {
+        const a = (cw ? -1 : 1) * (k / n) * TAU;
+        ps.push(new THREE.Vector2(rr * Math.cos(a), rr * Math.sin(a)));
+      }
+      return ps;
+    };
+
+    // plate: extruded square with one clearance hole per tile boss
+    const half = cell * 2.5;
+    const plateShape = new THREE.Shape([
+      new THREE.Vector2(-half, -half),
+      new THREE.Vector2(half, -half),
+      new THREE.Vector2(half, half),
+      new THREE.Vector2(-half, half),
+    ]);
+    for (const tile of this.tiles) {
+      const hole = new THREE.Path();
+      hole.setFromPoints(ring(holeR, true).map((q) => q.add(new THREE.Vector2((tile.col - 2) * cell, (2 - tile.row) * cell))));
+      plateShape.holes.push(hole);
+    }
+    const plateGeo = new THREE.ExtrudeGeometry(plateShape, { depth: t * 0.6, bevelEnabled: false, curveSegments: 24 });
+    plateGeo.translate(0, 0, -t * 0.3);
+    out.push({ name: 'plate', count: 1, object: new THREE.Mesh(plateGeo, metal(PALETTE.shaft)) });
+
+    // discs with integral bosses. Boss lengths are self-jigging: assembled
+    // with the disc back 0.1 off the plate front, the standard boss protrudes
+    // 2mm past the plate back (the cap glues over it) and the flip boss tip
+    // lands exactly on the O-gear's back face at its drive plane zBack(gi).
+    const bossDisc = (bossLen) => {
+      const g = new THREE.Group();
+      g.add(disc(tileR, t, PALETTE.output));
+      const boss = disc(bossR, bossLen + 0.2, PALETTE.shaft); // 0.2 sunk into the disc
+      boss.position.z = -t / 2 - bossLen / 2 + 0.1;
+      g.add(boss);
+      return g;
+    };
+    const flipGi = new Map(); // 'r,c' -> cluster index, only for tiles a BUILT drive covers
+    for (const d of this.drives) for (const [r, c] of CLUSTERS[d.spec.gi]) flipGi.set(cellKey(r, c), d.spec.gi);
+    let stdCount = 0;
+    const flipCounts = [0, 0];
+    for (const tile of this.tiles) {
+      const gi = flipGi.get(cellKey(tile.row, tile.col));
+      if (gi === undefined) stdCount += 1;
+      else flipCounts[gi] += 1;
+    }
+    const Lstd = 0.1 + t * 0.6 + 2;
+    const Lflip = (gi) => 0.1 + t * (1.3 + 0.5 * gi); // boss tip = zBack(gi) − gt/2, the gear's back face
+    out.push({ name: 'tile-disc', count: stdCount, object: bossDisc(Lstd) });
+    if (flipCounts[0] > 0) out.push({ name: 'tile-disc-flip-a', count: flipCounts[0], object: bossDisc(Lflip(0)) });
+    if (flipCounts[1] > 0) out.push({ name: 'tile-disc-flip-b', count: flipCounts[1], object: bossDisc(Lflip(1)) });
+
+    // retainer caps for the non-driven, non-fixed tiles (the centre is glued)
+    const washer = (rOut, rIn, thk) => {
+      const sh = new THREE.Shape(ring(rOut, false));
+      const hole = new THREE.Path();
+      hole.setFromPoints(ring(rIn, true));
+      sh.holes.push(hole);
+      const geo = new THREE.ExtrudeGeometry(sh, { depth: thk, bevelEnabled: false });
+      geo.translate(0, 0, -thk / 2);
+      return new THREE.Mesh(geo, metal(PALETTE.lock));
+    };
+    out.push({ name: 'tile-cap', count: stdCount - 1, object: washer(bossR + 2.5, bossR + glue, 2) });
 
     // letters, deduplicated by glyph with the board's true counts; pixelScale
     // 1.02 overlaps adjacent pixels so each glyph prints as one connected piece
@@ -469,9 +557,10 @@ export class SatorSquare {
       const n = this.drives.length;
       const s = this.drives[0].spec;
       const print = { thickness: s.gt, bevel: false }; // true contour at every z
-      const gear = (teeth, color) =>
-        makeGear({ module: s.m, teeth, pressureAngle: s.pa, backlash: s.bl }, color, print);
-      out.push({ name: 'o-tile-gear', count: 2 * n, object: gear(s.Zo, PALETTE.driven) });
+      const gear = (teeth, color, bore = 0) =>
+        makeGear({ module: s.m, teeth, pressureAngle: s.pa, backlash: s.bl }, color, { ...print, bore });
+      // the O gear glues flush onto the flip tile's boss end (glue gap, not a running fit)
+      out.push({ name: 'o-tile-gear', count: 2 * n, object: gear(s.Zo, PALETTE.driven, bossR + glue) });
       out.push({ name: 'drive-output-gear', count: n, object: gear(s.Zs, PALETTE.driver) });
 
       const cross = new THREE.Mesh(
@@ -516,6 +605,29 @@ export class SatorSquare {
       }
     }
     return out;
+  }
+
+  // Assembly instructions for the kit's README (export.partsZipBytes notes).
+  printNotes() {
+    const notes = [
+      'assembly (v1, tile system):',
+      '- each tile disc rides a plate hole on its rear boss (running fit; the',
+      '  "fit" knob sets the radial clearance, default 0.25mm).',
+      '- glue the centre N tile boss into its hole: it is the fixed hub.',
+      '- glue a tile-cap over each remaining non-flip boss end behind the plate.',
+      '- glue each letter onto its tile disc face.',
+    ];
+    if (this.drives.length > 0) {
+      notes.push(
+        '- flip O tiles: glue the o-tile-gear flush onto the long boss end —',
+        '  the gear is the retainer AND lands exactly on its mesh plane.',
+        '- glue each drive-cross face-to-face onto its drive-output-gear (coaxial;',
+        '  drive-driver-a/b differ by a half-tooth — keep the pairs as named).',
+        '- drive shafts/bracket are NOT in this kit yet (roadmap M3b): the drive',
+        '  stack must be mounted by hand for now.'
+      );
+    }
+    return notes;
   }
 
   dispose() {
