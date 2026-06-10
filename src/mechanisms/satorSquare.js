@@ -99,8 +99,12 @@ const TILE_COLOR = {
 
 // A block letter built from unit boxes on a 3×5 grid, centred at the origin and
 // standing proud of the tile face at +z. Tagged userData.isLetter so the
-// printable/decor split (and tests) can identify letter geometry.
-function letterGroup(ch, size, depth, z) {
+// printable/decor split (and tests) can identify letter geometry. pixelScale
+// sets the box size relative to the grid pitch: the rendered letters use 0.92
+// (airy pixel-art gaps); the PRINT kit uses 1.02 so adjacent pixels overlap and
+// every glyph comes out of the slicer as one connected piece (each SATOR glyph
+// is orthogonally connected on the 3×5 grid, so overlap is all it takes).
+function letterGroup(ch, size, depth, z, pixelScale = 0.92) {
   const g = new THREE.Group();
   g.userData.isLetter = true;
   const rows = GLYPHS[ch];
@@ -111,7 +115,7 @@ function letterGroup(ch, size, depth, z) {
   for (let r = 0; r < 5; r++) {
     for (let c = 0; c < 3; c++) {
       if (rows[r][c] !== '1') continue;
-      const box = new THREE.Mesh(new THREE.BoxGeometry(cw * 0.92, rh * 0.92, depth), mat);
+      const box = new THREE.Mesh(new THREE.BoxGeometry(cw * pixelScale, rh * pixelScale, depth), mat);
       box.position.set((c - 1) * cw, (2 - r) * rh, z);
       box.castShadow = true;
       g.add(box);
@@ -127,9 +131,14 @@ function letterGroup(ch, size, depth, z) {
 // pocket dips in from the rim. The four feature ANGLES are passed in (the derivation
 // puts the slots facing the two drivers and the pockets `amp` beyond) rather than
 // hardcoded — so the rendered slots are the ones the pins provably enter. Extruded.
-function genevaCrossGeo(R, slotW, slotDepth, thk, slotAngles, pocketAngles) {
+// `floorExtra` cuts the slot floor deeper than the kinematic slotDepth: the
+// derivation's slot bottom is the deepest reach of the pin CENTRE (c−a), so the
+// floor must drop at least a pin RADIUS further or the pin surface rams it at
+// every mid-push. The pocket depth stays tied to the kinematic slotDepth — the
+// locking cam (kinematics.satorCamGeometry) is derived against THAT pocket.
+function genevaCrossGeo(R, slotW, slotDepth, thk, slotAngles, pocketAngles, floorExtra = 0) {
   const w = slotW;
-  const bottom = R - slotDepth;
+  const bottom = R - slotDepth - floorExtra;
   const tMouth = Math.sqrt(Math.max(0, R * R - w * w));
   const dphi = Math.asin(Math.min(0.9, w / R)); // slot-mouth half-angle on the rim
   const pocketR = R - slotDepth * 0.55; // how far the dwell pocket dips in
@@ -163,16 +172,26 @@ function genevaCrossGeo(R, slotW, slotDepth, thk, slotAngles, pocketAngles) {
       pts.push(V(pocketR, f.a + pdphi * 0.4));
       pts.push(V(R, f.a + pdphi));
     }
-    // rim arc from this feature's exit to the next feature's entry
+    // rim arc from this feature's exit to the next feature's entry; stop one
+    // step short — the next feature's own first vertex owns that point (pushing
+    // both creates a near-duplicate -> zero-area sliver triangles in the STL)
     const next = feats[(i + 1) % feats.length];
     const aExit = f.a + (f.kind === 'slot' ? dphi : pdphi);
     let aNext = next.a - (next.kind === 'slot' ? dphi : pdphi);
     if (aNext <= aExit) aNext += TAU;
-    for (let k = 1; k <= 6; k++) pts.push(V(R, aExit + (aNext - aExit) * (k / 6)));
+    for (let k = 1; k <= 5; k++) pts.push(V(R, aExit + (aNext - aExit) * (k / 6)));
   }
   const shape = new THREE.Shape(pts);
+  // hub hole from explicit points (CW): absarc's 2π endpoint lands a float-noise
+  // hair off its start, leaving a near-duplicate seam vertex -> STL slivers
   const hole = new THREE.Path();
-  hole.absarc(0, 0, R * 0.18, 0, TAU, true);
+  const hr = R * 0.18;
+  const hpts = [];
+  for (let k = 0; k < 24; k++) {
+    const a = -(k / 24) * TAU;
+    hpts.push(new THREE.Vector2(hr * Math.cos(a), hr * Math.sin(a)));
+  }
+  hole.setFromPoints(hpts);
   shape.holes.push(hole);
   const geo = new THREE.ExtrudeGeometry(shape, { depth: thk, bevelEnabled: false, curveSegments: 6 });
   geo.translate(0, 0, -thk / 2);
@@ -235,8 +254,11 @@ function buildGearedDrive(p1, p2, oPivots, cell, thickness, gi, drive) {
   const star = new THREE.Object3D();
   const outGear = makeGear({ module: m, teeth: Zs, pressureAngle: pa, backlash: bl }, PALETTE.driver, { thickness: gt });
   const slotW = Math.max(pinR * 1.25, Rm * 0.05);
+  // slot floor: kinematic slotBottom is the deepest PIN-CENTRE reach (c−a), so cut
+  // a pin radius + 25% running clearance deeper or the pin surface bottoms out
+  const floorExtra = pinR * 1.25;
   const cross = new THREE.Mesh(
-    genevaCrossGeo(Rm, slotW, Rm - geom.slotBottom, gt * 0.9, [geom.sigmaA, geom.sigmaB], [geom.pocketA, geom.pocketB]),
+    genevaCrossGeo(Rm, slotW, Rm - geom.slotBottom, gt * 0.9, [geom.sigmaA, geom.sigmaB], [geom.pocketA, geom.pocketB], floorExtra),
     metal(PALETTE.output)
   );
   cross.position.z = -gt; // just behind the output gear
@@ -269,7 +291,12 @@ function buildGearedDrive(p1, p2, oPivots, cell, thickness, gi, drive) {
     gear.position.z = dz;
     if (which === 2) gear.rotation.z = driverMeshPhase; // interlock the two meshed driver gears (tooth-in-gap)
     const camGeo = new THREE.CylinderGeometry(cg.camR, cg.camR, gt * 0.8, 24, 1, false, cg.thetaStart, cg.thetaLength);
-    camGeo.rotateX(Math.PI / 2); // gap centred on local +x (angle 0) = where the pin sits
+    // CylinderGeometry sweeps theta from the +z axis (x = r·sinθ, z = r·cosθ), so
+    // rotateX alone lands the wedge at planar angle θ−π/2 — 90° clockwise of the
+    // satorCamGeometry contract (gap centred on local +x = the pin). The rotateZ
+    // closes that frame mismatch so the rendered gap truly faces the pin.
+    camGeo.rotateX(Math.PI / 2);
+    camGeo.rotateZ(Math.PI / 2);
     const cam = new THREE.Mesh(camGeo, metal(PALETTE.lock, { rough: 0.6, metalness: 0.4 }));
     cam.position.z = dz + gt; // locking cam toward the cross
     gw.add(gear, cam, pin(geom.a, 0, pinR, gt + thickness * 0.18, dz)); // crank pin rides the slot
@@ -277,14 +304,17 @@ function buildGearedDrive(p1, p2, oPivots, cell, thickness, gi, drive) {
     gears.push(gw);
   }
 
-  return { group: g, star, gears, geom, Zd, driverMeshPhase };
+  // `spec` records everything parts() needs to rebuild this drive's bodies in
+  // print pose (fresh geometry, not the live scene meshes).
+  const spec = { m, Zo, Zs, Zd, pa, gt, Rm, slotW, floorExtra, geom, cg, pinR, bl };
+  return { group: g, star, gears, geom, Zd, driverMeshPhase, spec };
 }
 
 export class SatorSquare {
   constructor(p = {}) {
     this.group = new THREE.Group();
-    const cell = p.cell ?? 40;
-    const thickness = p.thickness ?? 6;
+    const cell = (this.cell = p.cell ?? 40);
+    const thickness = (this.thickness = p.thickness ?? 6);
     this.spinN = p.spinN ?? 4; // turns per board revolution for spin AND index tiles
     this.indexClicks = p.indexClicks ?? 4; // clicks per tile-turn for index tiles
     this.pushFrac = p.pushFrac ?? 0.62;
@@ -404,6 +434,88 @@ export class SatorSquare {
         ? `\nO-drive ${this.drive.ratio}:1 step-up → cross rocks ±${((this.flipAmp * 180) / Math.PI).toFixed(1)}° (O flips 90°)`
         : '';
     return `SATOR square (5×5)\nupright ×${c.upright}  flip ×${c.flip}  spin ×${c.spin}  index ×${c.index}  fixed ×${c.fixed}${motion}${driveInfo}\nupright at 90° detents: ${this.legible ? 'yes' : 'NO'}`;
+  }
+
+  // The print kit: [{ name, count, object }] consumed by export.partsZipBytes.
+  // Every object is a FRESH print-pose build (flat at the origin, +Z = the print
+  // axis) — never the live scene — so calling this changes nothing on screen.
+  // Identical pieces are deduplicated; `count` is the quantity to print and
+  // lands in the STL filename (tile-disc-x25.stl). Print-pose gears are built
+  // with bevel:false: the screen's edge bevel dilates the extruded body outward
+  // by bevelSize, which would eat the whole backlash clearance in a real mesh
+  // (roadmap P2). Caller owns disposal of the returned objects.
+  parts() {
+    const cell = this.cell;
+    const t = this.thickness;
+    const out = [];
+
+    // the board plate and the 25 identical tile discs
+    const plate = new THREE.Mesh(new THREE.BoxGeometry(cell * 5, cell * 5, t * 0.6), metal(PALETTE.shaft));
+    out.push({ name: 'plate', count: 1, object: plate });
+    out.push({ name: 'tile-disc', count: 25, object: disc(cell * 0.44, t, PALETTE.output) });
+
+    // letters, deduplicated by glyph with the board's true counts; pixelScale
+    // 1.02 overlaps adjacent pixels so each glyph prints as one connected piece
+    const letterCounts = {};
+    for (const tile of this.tiles) letterCounts[tile.letter] = (letterCounts[tile.letter] ?? 0) + 1;
+    for (const [ch, count] of Object.entries(letterCounts)) {
+      out.push({ name: `letter-${ch}`, count, object: letterGroup(ch, cell * 0.62, t * 0.5, 0, 1.02) });
+    }
+
+    // drive hardware. The corner drives are geometrically identical (same pair
+    // spacing and the one shared drive config), so quantities scale with how
+    // many drives the current board actually built.
+    if (this.drives.length > 0) {
+      const n = this.drives.length;
+      const s = this.drives[0].spec;
+      const print = { thickness: s.gt, bevel: false }; // true contour at every z
+      const gear = (teeth, color) =>
+        makeGear({ module: s.m, teeth, pressureAngle: s.pa, backlash: s.bl }, color, print);
+      out.push({ name: 'o-tile-gear', count: 2 * n, object: gear(s.Zo, PALETTE.driven) });
+      out.push({ name: 'drive-output-gear', count: n, object: gear(s.Zs, PALETTE.driver) });
+
+      const cross = new THREE.Mesh(
+        genevaCrossGeo(s.Rm, s.slotW, s.Rm - s.geom.slotBottom, s.gt * 0.9, [s.geom.sigmaA, s.geom.sigmaB], [s.geom.pocketA, s.geom.pocketB], s.floorExtra),
+        metal(PALETTE.output)
+      );
+      out.push({ name: 'drive-cross', count: n, object: cross });
+
+      // driver = gear + locking cam + crank pin as ONE rigid printed part. Two
+      // print-pose fixes versus the scene: the cam is sunk to overlap the gear
+      // face (on screen it floats 0.1·gt above, in its own z-plane), and it is
+      // an EXTRUDED solid wedge — the scene's partial CylinderGeometry has no
+      // walls on the cut faces, fine to look at but not a watertight STL. The
+      // wedge also takes a 0.15mm radial relief: the kinematic camR exactly
+      // kisses the pocket bottom (zero design clearance on a sliding fit).
+      const camRelief = 0.15;
+      const buildDriver = (gearPhase) => {
+        const driver = new THREE.Object3D();
+        const camShape = new THREE.Shape();
+        camShape.moveTo(0, 0);
+        camShape.absarc(0, 0, s.cg.camR - camRelief, s.cg.thetaStart, s.cg.thetaStart + s.cg.thetaLength, false);
+        camShape.lineTo(0, 0);
+        const camGeo = new THREE.ExtrudeGeometry(camShape, { depth: s.gt * 0.8, bevelEnabled: false, curveSegments: 24 });
+        camGeo.translate(0, 0, -s.gt * 0.4);
+        const cam = new THREE.Mesh(camGeo, metal(PALETTE.lock));
+        cam.position.z = s.gt * 0.85; // bottom at 0.45·gt — 0.05·gt into the gear face
+        const driverGear = gear(s.Zd, PALETTE.driver);
+        driverGear.rotation.z = gearPhase; // baked into the printed part
+        driver.add(driverGear, cam, pin(s.geom.a, 0, s.pinR, s.gt + t * 0.18, 0));
+        return driver;
+      };
+      // The two meshed drivers of a pair are NOT interchangeable when the tooth
+      // interlock phase is non-zero (even driver teeth): the pin and cam pin the
+      // body's clocking, so the phase must live in the printed teeth themselves.
+      // One part per role; for odd counts (phase 0) one part covers both.
+      const phase = this.drives[0].driverMeshPhase;
+      if (phase > 1e-12) {
+        out.push({ name: 'drive-driver-a', count: n, object: buildDriver(0) });
+        out.push({ name: 'drive-driver-b', count: n, object: buildDriver(phase) });
+      } else {
+        out.push({ name: 'drive-driver', count: 2 * n, object: buildDriver(0) });
+      }
+    }
+    return out;
   }
 
   dispose() {

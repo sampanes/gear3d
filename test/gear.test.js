@@ -3,8 +3,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
-import { gearGeometry, twistAboutZ, scaleConical, bevelGearGeometry, spokeHoles } from '../src/gears/gear.js';
-import { gearMetrics } from '../src/gears/involute.js';
+import { gearGeometry, ringGearGeometry, twistAboutZ, scaleConical, bevelGearGeometry, spokeHoles } from '../src/gears/gear.js';
+import { gearMetrics, internalGearMetrics } from '../src/gears/involute.js';
 import { TAU, mod } from '../src/math.js';
 
 const PARAMS = { module: 4, teeth: 16, pressureAngle: 20 };
@@ -196,4 +196,27 @@ test('gearGeometry: spokes punch extra cut-outs (more vertices); default 0 leave
     spoked.attributes.position.count > solid.attributes.position.count,
     `5 cut-outs add wall geometry (${spoked.attributes.position.count} > ${solid.attributes.position.count})`
   );
+});
+
+test('bevel:false keeps the true contour at every z (print pose); the default bevel dilates the body', () => {
+  // ExtrudeGeometry's edge bevel pushes the BODY outward by bevelSize — only the
+  // cap faces carry the design contour. A printed pair built from beveled meshes
+  // would interfere by ~2*bevelSize, eating the whole backlash budget; print-pose
+  // builds therefore pass bevel:false. This pins both halves of that fact.
+  const p = { module: 5, teeth: 12, pressureAngle: 20 };
+  const { ra } = gearMetrics(p);
+  const flat = extents(gearGeometry(p, { thickness: 8, bevel: false }));
+  const beveled = extents(gearGeometry(p, { thickness: 8 }));
+  assert.ok(flat.maxR <= ra + 1e-4, `print pose stays at the tip circle (maxR ${flat.maxR} vs ra ${ra})`);
+  assert.ok(beveled.maxR >= ra + 0.3, `screen bevel dilates the body (maxR ${beveled.maxR} vs ra ${ra})`);
+  // same total thickness either way (the bevel trades depth for chamfer)
+  assert.ok(Math.abs(flat.maxZ - flat.minZ - 8) < 1e-6 && Math.abs(beveled.maxZ - beveled.minZ - 8) < 1e-6);
+
+  // ring gear: the dilation grows material INWARD (shrinks the tooth opening)
+  const rp = { module: 4, teeth: 48, pressureAngle: 20 };
+  const { ra: ringRa } = internalGearMetrics(rp);
+  const ringFlat = extents(ringGearGeometry(rp, { thickness: 8, bevel: false }));
+  const ringBeveled = extents(ringGearGeometry(rp, { thickness: 8 }));
+  assert.ok(ringFlat.minR >= ringRa - 1e-4, `print ring opening stays at ra (minR ${ringFlat.minR} vs ${ringRa})`);
+  assert.ok(ringBeveled.minR <= ringRa - 0.3, `screen ring bevel intrudes inward (minR ${ringBeveled.minR})`);
 });

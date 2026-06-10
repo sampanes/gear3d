@@ -5,8 +5,8 @@
 import * as THREE from 'three';
 import { createViewer, frame } from './scene.js';
 import { buildGUI } from './ui.js';
-import { setWireframe } from './parts.js';
-import { saveSTL } from './export.js';
+import { setWireframe, disposeObject } from './parts.js';
+import { saveSTL, savePartsZip } from './export.js';
 import { showOverlays, clearOverlays } from './overlays.js';
 import { TAU, mod } from './math.js';
 import { SpurTrain } from './mechanisms/spurTrain.js';
@@ -113,10 +113,26 @@ const actions = {
     const name = config.mode.toLowerCase().replace(/\s+/g, '-');
     const s = config.export.scale;
     const tag = s === 1 ? '' : `-x${s}`; // record the scale in the filename
-    // `printable` lets a mechanism export a subset of its parts (e.g. a future
+    // `printable` lets a mechanism export a subset of its parts (e.g. the
     // SATOR mode prints gears but not the decorative letters); falls back to the
     // whole group for every mechanism that doesn't split itself.
     saveSTL(mechanism.printable ?? mechanism.group, `gear3d-${name}${tag}.stl`, s);
+  },
+  exportParts: () => {
+    if (!mechanism) return;
+    const name = config.mode.toLowerCase().replace(/\s+/g, '-');
+    const s = config.export.scale;
+    const tag = s === 1 ? '' : `-x${s}`;
+    if (mechanism.parts) {
+      // per-part kit: one ZIP of laid-flat STLs (print-pose builds, never the
+      // live scene), plus a README manifest with quantities
+      const parts = mechanism.parts();
+      savePartsZip(parts, `gear3d-${name}${tag}-parts.zip`, s);
+      parts.forEach((p) => disposeObject(p.object)); // fresh builds — free them
+    } else {
+      // mechanism has no per-part split (yet): same as the single-file export
+      saveSTL(mechanism.printable ?? mechanism.group, `gear3d-${name}${tag}.stl`, s);
+    }
   },
 };
 

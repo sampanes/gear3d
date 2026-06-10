@@ -8,7 +8,9 @@
 // whole export — set it once and every part, across every export, comes out
 // matched, with no per-part resizing in the slicer / Blender.
 
+import { Box3, Vector3 } from 'three';
 import { STLExporter } from 'three/addons/exporters/STLExporter.js';
+import { zipBytes } from './zip.js';
 
 const exporter = new STLExporter();
 
@@ -28,18 +30,65 @@ export function stlBytes(object, scale = 1) {
   return data;
 }
 
-// Serialise `object` to a binary STL and trigger a browser download.
-export function saveSTL(object, filename = 'gear3d.stl', scale = 1) {
-  if (!object) return;
-
-  const data = stlBytes(object, scale);
-  const blob = new Blob([data], { type: 'model/stl' }); // data is a DataView
+function download(blob, filename) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = filename.endsWith('.stl') ? filename : `${filename}.stl`;
+  a.download = filename;
   document.body.appendChild(a);
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
+}
+
+// Serialise `object` to a binary STL and trigger a browser download.
+export function saveSTL(object, filename = 'gear3d.stl', scale = 1) {
+  if (!object) return;
+  const data = stlBytes(object, scale);
+  download(new Blob([data], { type: 'model/stl' }), filename.endsWith('.stl') ? filename : `${filename}.stl`);
+}
+
+// ---------------------------------------------------------------------------
+// Per-part kit export: one ZIP of binary STLs, one entry per distinct part.
+// `parts` is what a mechanism's parts() returns: [{ name, count, object }] —
+// each object a FRESH print-pose build (flat at the origin, +Z = print axis),
+// never the live scene. Identical parts are deduplicated by the mechanism and
+// carry their print quantity in `count`, which lands in the filename
+// (tile-disc-x25.stl => print 25 of it). A README.txt manifest is included.
+// ---------------------------------------------------------------------------
+const entryName = (p) => `${p.name}${(p.count ?? 1) > 1 ? `-x${p.count}` : ''}.stl`;
+
+export function partsZipBytes(parts, scale = 1) {
+  const size = new Vector3();
+  const dims = []; // per-part printed bounding box, for the manifest
+  const entries = parts.map((p) => {
+    // fresh objects have never been rendered, so their child matrices are
+    // stale — bake them before serialising or every child lands at the origin
+    p.object.updateMatrixWorld(true);
+    new Box3().setFromObject(p.object).getSize(size);
+    dims.push(`${(size.x * scale).toFixed(1)} x ${(size.y * scale).toFixed(1)} x ${(size.z * scale).toFixed(1)} mm`);
+    return { name: entryName(p), data: stlBytes(p.object, scale) };
+  });
+  const manifest = [
+    'gear3d printable kit',
+    '',
+    `scale: ${scale}  (model units are mm at scale 1)`,
+    '',
+    'parts (file -> quantity to print, printed size):',
+    ...parts.map((p, i) => `  ${entryName(p)}  x${p.count ?? 1}  (${dims[i]})`),
+    '',
+    'The -xN suffix is the print quantity, not a size. Gear teeth already',
+    'include whatever backlash the design was exported with; print at 100%.',
+    'Check the largest part against your print bed before slicing.',
+    '',
+  ].join('\n');
+  entries.unshift({ name: 'README.txt', data: new TextEncoder().encode(manifest) });
+  return zipBytes(entries);
+}
+
+// Serialise a parts kit and trigger a browser download of the ZIP.
+export function savePartsZip(parts, filename = 'gear3d-parts.zip', scale = 1) {
+  if (!parts || parts.length === 0) return;
+  const data = partsZipBytes(parts, scale);
+  download(new Blob([data], { type: 'application/zip' }), filename.endsWith('.zip') ? filename : `${filename}.zip`);
 }

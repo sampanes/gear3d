@@ -27,7 +27,8 @@ export function buildGUI(config, actions, modeNames) {
   // ----- Export -----
   const exp = gui.addFolder('Export (STL)');
   exp.add(config.export, 'scale', 0.1, 10, 0.01).name('scale × (1 = mm)');
-  exp.add(actions, 'exportSTL').name('export STL ⤓');
+  exp.add(actions, 'exportSTL').name('export STL ⤓ (one file)');
+  exp.add(actions, 'exportParts').name('export parts ZIP ⤓ (print kit)');
 
   // ----- Spur train -----
   const spur = gui.addFolder('Spur train');

@@ -9,7 +9,7 @@ import { DEG, TAU } from '../math.js';
 // `helix` angle (degrees) twists the extrusion into a helical gear; the sign
 // selects the hand (meshing parallel-axis gears use an equal angle of opposite
 // hand, so a train alternates the sign down the chain).
-export function gearGeometry(params, { thickness = 8, bore = 0, helix = 0, spokes = 0 } = {}) {
+export function gearGeometry(params, { thickness = 8, bore = 0, helix = 0, spokes = 0, bevel: edgeBevel = true } = {}) {
   const shape = new THREE.Shape(gearContour(params));
   if (bore > 0) {
     const hole = new THREE.Path();
@@ -22,7 +22,11 @@ export function gearGeometry(params, { thickness = 8, bore = 0, helix = 0, spoke
     cut.absarc(h.x, h.y, h.r, 0, Math.PI * 2, true); // CW: a hole in the CCW gear shape
     shape.holes.push(cut);
   }
-  const bevel = Math.min(0.5, thickness * 0.08);
+  // ExtrudeGeometry's edge bevel DILATES the body outward by bevelSize (only the
+  // two cap faces carry the true contour) — pretty on screen, but ~2*bevelSize of
+  // mutual interference in a printed mesh, which would eat the whole backlash
+  // budget. Print-pose builds pass bevel:false to get the true contour at every z.
+  const bevel = edgeBevel ? Math.min(0.5, thickness * 0.08) : 0;
 
   // Total twist across the thickness for the requested helix angle at the pitch
   // circle: tan(helix) = (r * twist) / thickness  ->  twist = thickness*tan/r.
@@ -33,7 +37,7 @@ export function gearGeometry(params, { thickness = 8, bore = 0, helix = 0, spoke
 
   const geo = new THREE.ExtrudeGeometry(shape, {
     depth: thickness - 2 * bevel,
-    bevelEnabled: true,
+    bevelEnabled: bevel > 0,
     bevelThickness: bevel,
     bevelSize: bevel,
     bevelSegments: 1,
@@ -105,7 +109,7 @@ export function makeGear(params, color, opts = {}) {
 
 // A ring (internal) gear: a plain outer rim with the inward-pointing tooth
 // profile cut out as a hole. Returns a BufferGeometry centred on Z, axis +Z.
-export function ringGearGeometry(params, { thickness = 8 } = {}) {
+export function ringGearGeometry(params, { thickness = 8, bevel: edgeBevel = true } = {}) {
   const { rOuter } = internalGearMetrics(params);
   const shape = new THREE.Shape();
   shape.absarc(0, 0, rOuter, 0, TAU, false); // outer rim, CCW
@@ -113,10 +117,12 @@ export function ringGearGeometry(params, { thickness = 8 } = {}) {
   // the contour is CCW; a hole must wind opposite the shape, so reverse it
   hole.setFromPoints(internalGearContour(params).reverse());
   shape.holes.push(hole);
-  const bevel = Math.min(0.5, thickness * 0.08);
+  // bevel:false for print-pose builds — see gearGeometry (the bevel dilates the
+  // body; on a ring that SHRINKS the tooth opening, same interference effect).
+  const bevel = edgeBevel ? Math.min(0.5, thickness * 0.08) : 0;
   const geo = new THREE.ExtrudeGeometry(shape, {
     depth: thickness - 2 * bevel,
-    bevelEnabled: true,
+    bevelEnabled: bevel > 0,
     bevelThickness: bevel,
     bevelSize: bevel,
     bevelSegments: 1,

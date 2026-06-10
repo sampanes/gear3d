@@ -15,6 +15,7 @@ import { InternalGear } from '../src/mechanisms/internalGear.js';
 import { Planetary } from '../src/mechanisms/planetary.js';
 import { BevelPair } from '../src/mechanisms/bevelGears.js';
 import { SatorSquare, defaultCells, behaviorOptions, cellKey, PRESETS } from '../src/mechanisms/satorSquare.js';
+import { stlBytes } from '../src/export.js';
 import {
   spurTrainPhases,
   spurGearAngle,
@@ -488,6 +489,173 @@ test('SATOR drive backlash: motion byte-identical, only tooth flanks change', ()
   }
   s0.dispose();
   sb.dispose();
+});
+
+test('SATOR parts(): the default board yields the full print kit with true counts, scene untouched', () => {
+  const m = new SatorSquare(CONFIG.sator);
+  const childrenBefore = m.printable.children.length + m.decor.children.length;
+  const parts = m.parts();
+  assert.equal(m.printable.children.length + m.decor.children.length, childrenBefore, 'parts() builds fresh, never mutates the scene');
+
+  const byName = Object.fromEntries(parts.map((p) => [p.name, p]));
+  assert.equal(byName['plate'].count, 1);
+  assert.equal(byName['tile-disc'].count, 25);
+  // SATOR/AREPO/TENET/OPERA/ROTAS letter census
+  const letters = { S: 2, A: 4, T: 4, O: 4, R: 4, E: 4, P: 2, N: 1 };
+  for (const [ch, n] of Object.entries(letters)) assert.equal(byName[`letter-${ch}`].count, n, `letter ${ch}`);
+  assert.equal(byName['o-tile-gear'].count, 4, 'one gear per flipping O');
+  assert.equal(byName['drive-output-gear'].count, 2);
+  assert.equal(byName['drive-cross'].count, 2);
+  // default driverTeeth=10 is EVEN: the tooth interlock phase is non-zero, so
+  // the two meshed drivers are different printed parts (a/b variants)
+  assert.equal(byName['drive-driver-a'].count, 2);
+  assert.equal(byName['drive-driver-b'].count, 2);
+  assert.equal(parts.length, 2 + 8 + 5, 'kit entries: plate + disc + 8 glyphs + 5 drive kinds');
+  assert.equal(parts.reduce((s, p) => s + p.count, 0), 63, 'total physical pieces');
+
+  // every part serialises to a real, non-empty binary STL
+  for (const p of parts) {
+    p.object.updateMatrixWorld(true);
+    const dv = stlBytes(p.object, 1);
+    assert.ok(dv.getUint32(80, true) > 0, `${p.name}: empty STL`);
+  }
+  m.dispose();
+});
+
+test('SATOR parts(): a board with no flips ships no drive hardware', () => {
+  const m = new SatorSquare({ ...CONFIG.sator, cells: PRESETS['All upright']() });
+  assert.equal(m.drives.length, 0, 'precondition: no drives built');
+  const names = m.parts().map((p) => p.name);
+  assert.ok(!names.some((n) => n.startsWith('drive-') || n === 'o-tile-gear'), `no drive parts in ${names}`);
+  m.dispose();
+});
+
+test('SATOR parts(): every letter glyph is ONE connected piece; the scene keeps its pixel gaps', () => {
+  const m = new SatorSquare(CONFIG.sator);
+  const cw = (CONFIG.sator.cell * 0.62) / 3; // pixel pitch (x); y pitch differs but scales the same
+  for (const p of m.parts().filter((q) => q.name.startsWith('letter-'))) {
+    const boxes = p.object.children.map((b) => ({
+      x: b.position.x,
+      y: b.position.y,
+      w: b.geometry.parameters.width,
+      h: b.geometry.parameters.height,
+    }));
+    near(boxes[0].w, cw * 1.02, 1e-9, `${p.name}: print pixels overlap their pitch`);
+    // strict-overlap flood fill must reach every pixel (touching faces don't count)
+    const overlaps = (a, b) =>
+      Math.abs(a.x - b.x) < (a.w + b.w) / 2 - 1e-9 && Math.abs(a.y - b.y) < (a.h + b.h) / 2 - 1e-9;
+    const seen = new Set([0]);
+    const stack = [0];
+    while (stack.length) {
+      const i = stack.pop();
+      boxes.forEach((b, j) => {
+        if (!seen.has(j) && overlaps(boxes[i], b)) {
+          seen.add(j);
+          stack.push(j);
+        }
+      });
+    }
+    assert.equal(seen.size, boxes.length, `${p.name}: ${seen.size}/${boxes.length} pixels connected`);
+  }
+  // the rendered letters are untouched: 0.92-pitch pixel-art look (byte-identical default)
+  const sceneBox = m.decor.children[0].children[0].children[0];
+  near(sceneBox.geometry.parameters.width, cw * 0.92, 1e-9, 'scene glyph keeps the 0.92 pixel scale');
+  m.dispose();
+});
+
+test('SATOR parts(): the printed driver pair carries the tooth interlock phase (even teeth)', () => {
+  // the pin and cam fix each driver body's clocking, so driver-b's half-tooth
+  // mesh phase must be baked into its printed teeth — identical parts would
+  // assemble tooth-ON-tooth for every even driver count (incl. the default 10)
+  const m = new SatorSquare(CONFIG.sator);
+  const parts = m.parts();
+  const phase = m.drives[0].driverMeshPhase;
+  assert.ok(phase > 1e-6, 'precondition: default Zd=10 (even) has a non-zero interlock phase');
+  const a = parts.find((p) => p.name === 'drive-driver-a').object;
+  const b = parts.find((p) => p.name === 'drive-driver-b').object;
+  near(a.children[0].rotation.z, 0, 1e-12, 'driver-a gear at phase 0');
+  near(b.children[0].rotation.z, phase, 1e-12, 'driver-b gear clocked by driverMeshPhase');
+  m.dispose();
+
+  // an ODD driver count has phase 0 — one interchangeable part covers both
+  const modd = new SatorSquare({ ...CONFIG.sator, drive: { driverTeeth: 11 } });
+  assert.ok(modd.drives[0].Zd % 2 === 1, 'precondition: odd driver teeth');
+  const podd = modd.parts();
+  assert.ok(podd.find((p) => p.name === 'drive-driver')?.count === 4, 'odd teeth: single driver part x4');
+  assert.ok(!podd.find((p) => p.name === 'drive-driver-a'), 'no variants needed at phase 0');
+  modd.dispose();
+});
+
+test('SATOR scene: the locking cam gap faces the crank pin (rendered geometry, 90° frame regression)', () => {
+  // CylinderGeometry sweeps theta from +z, so rotateX alone leaves the wedge 90°
+  // clockwise of the kinematics contract (gap centred on local +x = the pin).
+  const m = new SatorSquare(CONFIG.sator);
+  const d = m.drives[0];
+  const cam = d.gears[0].children[1]; // gw children: [gear, cam, pin]
+  const gapHalf = d.spec.cg.thetaStart; // satorCamGeometry: thetaStart = gap half-angle
+  const camR = d.spec.cg.camR;
+  const pos = cam.geometry.attributes.position;
+  let inGap = 0;
+  let nearPi = 0;
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i);
+    const y = pos.getY(i);
+    if (Math.hypot(x, y) < camR * 0.9) continue; // rim vertices only
+    const ang = Math.atan2(y, x);
+    if (Math.abs(ang) < gapHalf - 1e-6) inGap++;
+    if (Math.abs(Math.abs(ang) - Math.PI) < 0.5) nearPi++;
+  }
+  assert.equal(inGap, 0, 'no cam rim material inside the gap that must clear the pin');
+  assert.ok(nearPi > 0, 'cam solid covers the side opposite the pin');
+  m.dispose();
+});
+
+test('SATOR cross: the slot floor clears the pin SURFACE, not just its centre (print-jam regression)', () => {
+  // kinematic slotBottom = c(1-sin amp) = the deepest reach of the pin CENTRE;
+  // the rendered/printed floor must sit at least pinR deeper or the drive jams
+  const m = new SatorSquare(CONFIG.sator);
+  const d = m.drives[0];
+  const cross = d.star.children[1]; // star children: [output gear pivot, cross mesh]
+  const pos = cross.geometry.attributes.position;
+  let floorR = Infinity;
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i);
+    const y = pos.getY(i);
+    const ang = Math.atan2(y, x);
+    const dA = Math.abs(Math.atan2(Math.sin(ang - d.geom.sigmaA), Math.cos(ang - d.geom.sigmaA)));
+    if (dA < 0.35) floorR = Math.min(floorR, Math.hypot(x, y)); // slot-A band
+  }
+  assert.ok(
+    floorR <= d.geom.slotBottom - d.spec.pinR,
+    `slot floor (r=${floorR.toFixed(3)}) must clear the pin surface (${(d.geom.slotBottom - d.spec.pinR).toFixed(3)})`
+  );
+  m.dispose();
+});
+
+test('SATOR parts(): the driver is one printable solid and print gears carry the true contour', () => {
+  const m = new SatorSquare(CONFIG.sator);
+  const driver = m.parts().find((p) => p.name === 'drive-driver-a').object;
+  driver.updateMatrixWorld(true);
+  const [gearPivot, cam, crankPin] = driver.children;
+  const gearBox = new THREE.Box3().setFromObject(gearPivot);
+  const camBox = new THREE.Box3().setFromObject(cam);
+  const pinBox = new THREE.Box3().setFromObject(crankPin);
+  // in the SCENE the cam floats 0.1·gt above the gear (separate z-planes); the
+  // print part must sink it into the gear face so the body is one solid
+  assert.ok(camBox.min.z < gearBox.max.z - 1e-9, `cam sunk into the gear (cam ${camBox.min.z} vs gear top ${gearBox.max.z})`);
+  assert.ok(pinBox.min.z < gearBox.max.z - 1e-9, 'crank pin rooted in the gear');
+
+  // print-pose gear skips the screen bevel: no body vertex beyond the tip circle
+  const s = m.drives[0].spec;
+  const ra = (s.m * s.Zd) / 2 + s.m;
+  let maxR = 0;
+  gearPivot.traverse((node) => {
+    if (!node.geometry) return;
+    const pos = node.geometry.attributes.position;
+    for (let i = 0; i < pos.count; i++) maxR = Math.max(maxR, Math.hypot(pos.getX(i), pos.getY(i)));
+  });
+  assert.ok(maxR <= ra + 1e-4, `true contour at every z (maxR ${maxR} vs ra ${ra})`);
+  m.dispose();
 });
 
 test('SatorSquare honors a custom cells map and rejects illegal behaviors', () => {
