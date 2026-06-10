@@ -46,6 +46,7 @@ export function buildGUI(config, actions, modeNames) {
   spur.add(config.spur, 'thickness', 2, 20, 0.5).onChange(actions.rebuild);
   spur.add(config.spur, 'helix', 0, 40, 1).name('helix angle °').onChange(actions.rebuild);
   spur.add(config.spur, 'spokes', 0, 8, 1).name('spokes (cut-outs)').onChange(actions.rebuild);
+  spur.add(config.spur, 'backlash', 0, 1, 0.02).name('backlash (mm)').onChange(actions.rebuild);
 
   // ----- Geneva -----
   const gen = gui.addFolder('Geneva drive');
@@ -64,6 +65,7 @@ export function buildGUI(config, actions, modeNames) {
   int.add(config.internal, 'module', 2, 12, 0.5).onChange(actions.rebuild);
   int.add(config.internal, 'pressureAngle', 14.5, 25, 0.5).name('pressure angle').onChange(actions.rebuild);
   int.add(config.internal, 'thickness', 2, 20, 0.5).onChange(actions.rebuild);
+  int.add(config.internal, 'backlash', 0, 1, 0.02).name('backlash (mm)').onChange(actions.rebuild);
 
   // ----- Planetary -----
   const pl = gui.addFolder('Planetary');
@@ -74,6 +76,7 @@ export function buildGUI(config, actions, modeNames) {
   pl.add(config.planetary, 'module', 2, 12, 0.5).onChange(actions.rebuild);
   pl.add(config.planetary, 'pressureAngle', 14.5, 25, 0.5).name('pressure angle').onChange(actions.rebuild);
   pl.add(config.planetary, 'thickness', 2, 20, 0.5).onChange(actions.rebuild);
+  pl.add(config.planetary, 'backlash', 0, 1, 0.02).name('backlash (mm)').onChange(actions.rebuild);
 
   // ----- Bevel -----
   const bev = gui.addFolder('Bevel');
@@ -82,6 +85,7 @@ export function buildGUI(config, actions, modeNames) {
   bev.add(config.bevel, 'module', 2, 12, 0.5).onChange(actions.rebuild);
   bev.add(config.bevel, 'pressureAngle', 14.5, 25, 0.5).name('pressure angle').onChange(actions.rebuild);
   bev.add(config.bevel, 'faceWidth', 4, 30, 1).name('face width').onChange(actions.rebuild);
+  bev.add(config.bevel, 'backlash', 0, 1, 0.02).name('backlash (mm)').onChange(actions.rebuild);
 
   // ----- SATOR square -----
   const sat = gui.addFolder('SATOR square');
@@ -100,6 +104,9 @@ export function buildGUI(config, actions, modeNames) {
   drv.add(config.sator.drive, 'ratio', [1.5, 2, 3, 4]).name('step-up ratio').onChange(actions.rebuild);
   drv.add(config.sator.drive, 'driverTeeth', 6, 16, 1).name('driver teeth').onChange(actions.rebuild);
   drv.add(config.sator.drive, 'pressureAngle', 14.5, 25, 0.5).name('pressure angle').onChange(actions.rebuild);
+  // print clearance: total circumferential play per mesh (each gear thins by half);
+  // 0.1–0.4 mm is the usual FDM range. 0 keeps the theoretical (on-screen) profile.
+  drv.add(config.sator.drive, 'backlash', 0, 1, 0.02).name('backlash (mm)').onChange(actions.rebuild);
 
   // preset palettes: apply a fresh cells map, refresh the per-cell dropdowns,
   // then rebuild. Manual per-cell edits below override the loaded preset.

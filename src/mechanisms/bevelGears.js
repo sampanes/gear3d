@@ -28,7 +28,8 @@ export class BevelPair {
     const boreB = Math.min(Math.max(m * 0.85, 1.2), mB.rf * 0.5);
 
     // gear A (driver), axis +Z, apex at the origin
-    this.gearA = makeBevelGear({ module: m, teeth: this.zA, pressureAngle: pa }, PALETTE.driver, {
+    const bl = p.backlash ?? 0;
+    this.gearA = makeBevelGear({ module: m, teeth: this.zA, pressureAngle: pa, backlash: bl }, PALETTE.driver, {
       faceWidth: face,
       coneAngle: gammaA,
       bore: boreA,
@@ -42,7 +43,7 @@ export class BevelPair {
     this.bOrient = new THREE.Group();
     this.bOrient.rotation.x = -Math.PI / 2;
     this.group.add(this.bOrient);
-    this.gearB = makeBevelGear({ module: m, teeth: this.zB, pressureAngle: pa }, PALETTE.driven, {
+    this.gearB = makeBevelGear({ module: m, teeth: this.zB, pressureAngle: pa, backlash: bl }, PALETTE.driven, {
       faceWidth: face,
       coneAngle: gammaB,
       bore: boreB,

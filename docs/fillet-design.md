@@ -36,6 +36,16 @@ L  = PI*m/4 - 1.25*m*tan(alpha)              // corner lateral offset from space
                                              //   depends ONLY on m, alpha (= 1.3217 at m4,a20)
 ```
 
+**Backlash (print clearance), added 2026-06:** with `params.backlash = bl` (mm of
+circumferential play per mesh; each gear thins its tooth by `bl/2`), the gear is
+cut by a rack whose tooth is `bl/2` wider at the pitch line. Two terms change and
+nothing else: every flank rotates `delta = bl/(4r)` toward the tooth centre
+(`psi` gains `-delta` — a rigid rotation, still a true involute of the same base
+circle), and the rack corner moves outward: `L += bl/4`. The trochoid machinery
+above is unchanged — flank and fillet remain one consistent generated geometry.
+`delta` is clamped so the tip arc never inverts (absurd requests degrade to a
+near-pointed tooth). `bl = 0` is byte-identical to this spec.
+
 ## Canonical trochoid (space-centre framing; parameter u = gear roll angle, rad)
 ```
 X  = r - b              // = rf, constant radial line of the sharp corner

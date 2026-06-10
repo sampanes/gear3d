@@ -451,6 +451,45 @@ test('SatorSquare: the two meshed driver gears interlock tooth-in-gap (phased so
   }
 });
 
+test('backlash thins teeth without moving any mount: spur centres + phases identical, geometry differs', () => {
+  const t0 = new SpurTrain(CONFIG.spur);
+  const tb = new SpurTrain({ ...CONFIG.spur, backlash: 0.4 });
+  assert.deepEqual(tb.phases, t0.phases, 'tooth phases unchanged');
+  for (let i = 0; i < t0.gears.length; i++) {
+    near(tb.gears[i].position.x, t0.gears[i].position.x, 1e-12, `gear ${i} centre`);
+    const g0 = t0.gears[i].children[0].geometry.attributes.position;
+    const gb = tb.gears[i].children[0].geometry.attributes.position;
+    assert.equal(gb.count, g0.count, `gear ${i}: same vertex layout (point counts are backlash-independent)`);
+    let maxDiff = 0;
+    for (let k = 0; k < g0.count; k++) {
+      maxDiff = Math.max(maxDiff, Math.abs(gb.getX(k) - g0.getX(k)), Math.abs(gb.getY(k) - g0.getY(k)));
+    }
+    assert.ok(maxDiff > 1e-4, `gear ${i}: teeth actually thinned (the passthrough reached the contour)`);
+  }
+  t0.dispose();
+  tb.dispose();
+});
+
+test('SATOR drive backlash: motion byte-identical, only tooth flanks change', () => {
+  const s0 = new SatorSquare(CONFIG.sator);
+  const sb = new SatorSquare({ ...CONFIG.sator, drive: { backlash: 0.3 } });
+  assert.equal(sb.drives.length, s0.drives.length, 'same drives built');
+  for (const phi of THETAS) {
+    s0.update(phi);
+    sb.update(phi);
+    for (let i = 0; i < s0.tiles.length; i++) {
+      near(sb.tiles[i].gearPivot.rotation.z, s0.tiles[i].gearPivot.rotation.z, 1e-12, `tile ${i} psi @phi=${phi}`);
+    }
+    for (let d = 0; d < s0.drives.length; d++) {
+      near(sb.drives[d].star.rotation.z, s0.drives[d].star.rotation.z, 1e-12, `drive ${d} cross @phi=${phi}`);
+      near(sb.drives[d].gears[0].rotation.z, s0.drives[d].gears[0].rotation.z, 1e-12, `drive ${d} driver1 @phi=${phi}`);
+      near(sb.drives[d].gears[1].rotation.z, s0.drives[d].gears[1].rotation.z, 1e-12, `drive ${d} driver2 @phi=${phi}`);
+    }
+  }
+  s0.dispose();
+  sb.dispose();
+});
+
 test('SatorSquare honors a custom cells map and rejects illegal behaviors', () => {
   const cells = defaultCells();
   cells[cellKey(0, 0)] = 'flip'; // (0,0) S is symmetric — flip is legal

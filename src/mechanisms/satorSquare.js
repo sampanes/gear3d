@@ -199,6 +199,7 @@ function buildGearedDrive(p1, p2, oPivots, cell, thickness, gi, drive) {
   // proven cross angle). The SAME amp is fed to the flip tiles so the gear teeth stay meshed.
   const ratio = drive.ratio;
   const amp = Math.PI / (4 * ratio); // cross rock half-swing; ratio 2 → ±22.5°
+  const bl = drive.backlash ?? 0; // print clearance: thins every tooth, mount geometry untouched
   const Zo = 12;
   const Zs = Math.round(ratio * Zo); // R:1 step-up (output gear : O gear), integer tooth count
   const m = (2 * d) / (Zs + Zo); // module so the pitch circles meet at distance d
@@ -208,7 +209,7 @@ function buildGearedDrive(p1, p2, oPivots, cell, thickness, gi, drive) {
 
   // a gear on each O tile pivot — rocks 0..90° with the tile (psi = satorFlipRock)
   for (const piv of oPivots) {
-    const og = makeGear({ module: m, teeth: Zo, pressureAngle: pa }, PALETTE.driven, { thickness: gt });
+    const og = makeGear({ module: m, teeth: Zo, pressureAngle: pa, backlash: bl }, PALETTE.driven, { thickness: gt });
     og.position.z = zBack;
     piv.add(og);
   }
@@ -232,7 +233,7 @@ function buildGearedDrive(p1, p2, oPivots, cell, thickness, gi, drive) {
 
   // star = output gear (meshes the O gears) + the coaxial slotted/pocketed cross
   const star = new THREE.Object3D();
-  const outGear = makeGear({ module: m, teeth: Zs, pressureAngle: pa }, PALETTE.driver, { thickness: gt });
+  const outGear = makeGear({ module: m, teeth: Zs, pressureAngle: pa, backlash: bl }, PALETTE.driver, { thickness: gt });
   const slotW = Math.max(pinR * 1.25, Rm * 0.05);
   const cross = new THREE.Mesh(
     genevaCrossGeo(Rm, slotW, Rm - geom.slotBottom, gt * 0.9, [geom.sigmaA, geom.sigmaB], [geom.pocketA, geom.pocketB]),
@@ -264,7 +265,7 @@ function buildGearedDrive(p1, p2, oPivots, cell, thickness, gi, drive) {
     const D = which === 1 ? geom.D1 : geom.D2;
     const gw = new THREE.Object3D();
     gw.position.set(D[0], D[1], 0);
-    const gear = makeGear({ module: m, teeth: Zd, pressureAngle: pa }, which === 1 ? PALETTE.driver : PALETTE.driven, { thickness: gt });
+    const gear = makeGear({ module: m, teeth: Zd, pressureAngle: pa, backlash: bl }, which === 1 ? PALETTE.driver : PALETTE.driven, { thickness: gt });
     gear.position.z = dz;
     if (which === 2) gear.rotation.z = driverMeshPhase; // interlock the two meshed driver gears (tooth-in-gap)
     const camGeo = new THREE.CylinderGeometry(cg.camR, cg.camR, gt * 0.8, 24, 1, false, cg.thetaStart, cg.thetaLength);
@@ -292,7 +293,7 @@ export class SatorSquare {
     // O-flip drive knobs (modular). ratio sets the cross swing amp = π/(4·ratio); the SAME amp
     // drives both the rendered cross and the flip tiles so their gears stay meshed. Defaults
     // (ratio 2 → amp π/8, 10 driver teeth, 20° PA) reproduce the original drive exactly.
-    this.drive = { ratio: 2, driverTeeth: 10, pressureAngle: 20, ...(p.drive ?? {}) };
+    this.drive = { ratio: 2, driverTeeth: 10, pressureAngle: 20, backlash: 0, ...(p.drive ?? {}) };
     this.flipAmp = Math.PI / (4 * this.drive.ratio);
 
     // Two carriers that rotate together by Phi: printable holds the board + tile

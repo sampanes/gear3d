@@ -48,13 +48,28 @@ export function rootFilletGeometry(params) {
   const invAlpha = involute(alpha);
   const sigma = Math.PI / z; // space (gap) centre line, half a pitch off the tooth centre
 
+  // Backlash (print clearance): params.backlash is the mesh's TOTAL circumferential
+  // play in mm at the pitch circle; each gear of the pair contributes half, so this
+  // tooth thins by backlash/2 of arc — each flank rotates delta = backlash/(4r)
+  // toward the tooth centre (a rigid rotation, so the flank stays a true involute
+  // of the same base circle). Equivalently the gear is cut by a rack whose tooth is
+  // backlash/2 wider at the pitch line, so the rack corner that traces the root
+  // trochoid sits backlash/4 further from the space centre (the +bl/4 in L below) —
+  // flank and fillet stay one consistent generated geometry. Mount geometry
+  // (r, rb, ra, rf, centre distances) is untouched. Clamped so the tip arc never
+  // inverts: an absurd request degrades to a near-pointed tooth, never a fold.
+  const psiTip0 = halfTooth + invAlpha - involute(Math.acos(Math.min(1, rb / ra)));
+  const blReq = Number.isFinite(params.backlash) ? Math.max(params.backlash, 0) : 0; // NaN/negative -> 0
+  const delta = Math.min(blReq / (4 * r), Math.max(0, 0.98 * psiTip0));
+  const bl = 4 * r * delta; // effective (post-clamp) backlash
+
   // involute flank angle off the tooth centre at radius rho (>= rb)
   const psi = (rho) => {
     const ar = Math.acos(Math.min(1, rb / rho));
-    return halfTooth + invAlpha - involute(ar);
+    return halfTooth - delta + invAlpha - involute(ar);
   };
   const b = 1.25 * m;
-  const L = (Math.PI * m) / 4 - b * Math.tan(alpha);
+  const L = (Math.PI * m) / 4 + bl / 4 - b * Math.tan(alpha);
   const X = rf; // = r - b
   const landHalfAng = Math.max(0, L / r); // flat root-land half-width (rad)
 
@@ -228,7 +243,7 @@ export function internalGearMetrics({ module: m, teeth: z, pressureAngle = 20, r
 // gear bridges [rf, rb] down to its root. Use this as a (reversed) hole inside a
 // plain outer-rim circle.
 export function internalGearContour(params, stepsPerFlank = 14) {
-  const { z, alpha, rb, ra, rf } = internalGearMetrics(params);
+  const { r, z, alpha, rb, ra, rf } = internalGearMetrics(params);
   const pitch = TAU / z;
   const halfPitch = Math.PI / z;
   const halfTooth = Math.PI / (2 * z);
@@ -238,10 +253,18 @@ export function internalGearContour(params, stepsPerFlank = 14) {
   const rTip = ra; // the true (design) addendum the tooth tip must reach
   const rOut = rf;
 
+  // Backlash: the ring tooth thins by backlash/2 of arc at the pitch circle —
+  // the same half-share as an external gear (see rootFilletGeometry), so a
+  // meshed pair splits the play evenly: both flanks rotate delta = backlash/(4r)
+  // toward the tooth centre. Clamped so the inner tip arc never inverts.
+  const phiTip0 = halfPitch - (halfTooth + invAlpha - involute(Math.acos(Math.min(1, rb / rIn))));
+  const blReq = Number.isFinite(params.backlash) ? Math.max(params.backlash, 0) : 0; // NaN/negative -> 0
+  const delta = Math.min(blReq / (4 * r), Math.max(0, 0.98 * phiTip0));
+
   // tooth angular half-width at radius rho: narrow at the inner tip, wide at root
   const phi = (rho) => {
     const ar = Math.acos(Math.min(1, rb / rho));
-    return halfPitch - (halfTooth + invAlpha - involute(ar));
+    return halfPitch - (halfTooth + delta + invAlpha - involute(ar));
   };
 
   const pts = [];

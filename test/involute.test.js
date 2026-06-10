@@ -283,3 +283,126 @@ test('internal tooth thickness at the pitch circle equals pi*m/2', () => {
     near(thickness, (Math.PI * p.module) / 2, 3e-3 * r, `${JSON.stringify(p)}`);
   }
 });
+
+// ---------------------------------------------------------------------------
+// Backlash (print clearance) — the "print pack" tooth-thinning parameter.
+// params.backlash = TOTAL circumferential play per mesh (mm at the pitch
+// circle); each gear of a pair thins its tooth by half of it, so the pair
+// splits the play evenly. Mount geometry (radii, centre distances) untouched.
+// ---------------------------------------------------------------------------
+test('backlash 0 / absent / NaN / negative are byte-identical (the default-off guard)', () => {
+  for (const bad of [0, NaN, -0.5]) {
+    for (const p of PARAMS) {
+      assert.deepEqual(gearContour({ ...p, backlash: bad }, 14), gearContour(p, 14), `${JSON.stringify(p)} backlash=${bad}`);
+    }
+    for (const p of RINGS) {
+      assert.deepEqual(internalGearContour({ ...p, backlash: bad }, 14), internalGearContour(p, 14), `${JSON.stringify(p)} backlash=${bad}`);
+    }
+  }
+});
+
+test('backlash rotates each flank rigidly by b/(4r) and widens the root land to match', () => {
+  const p = { module: 4, teeth: 20, pressureAngle: 20 };
+  const bl = 0.4;
+  const g0 = rootFilletGeometry(p);
+  const gb = rootFilletGeometry({ ...p, backlash: bl });
+  const { r, rb, ra } = gearMetrics(p);
+  const delta = bl / (4 * r);
+  // rigid rotation: the same involute, turned delta toward the tooth centre
+  for (let k = 0; k <= 10; k++) {
+    const rho = rb + 1e-9 + (ra - rb - 1e-9) * (k / 10);
+    near(gb.psi(rho), g0.psi(rho) - delta, 1e-12, `flank shift at rho=${rho.toFixed(2)}`);
+  }
+  // at the pitch circle the involute terms cancel exactly: psi(r) = halfTooth - delta
+  near(gb.psi(r), Math.PI / (2 * p.teeth) - delta, 1e-12, 'pitch-circle flank angle');
+  // the cutting rack tooth widens by bl/2, so its corner sits bl/4 further from
+  // the space centre: the flat root land widens by exactly delta on each side
+  near(gb.landHalfAng, g0.landHalfAng + delta, 1e-12, 'root land half-angle');
+  // mount geometry never sees backlash
+  assert.deepEqual(gearMetrics({ ...p, backlash: bl }), gearMetrics(p));
+});
+
+test('backlash thins the measured pitch-circle tooth to pi*m/2 - b/2 (external)', () => {
+  const bl = 0.5;
+  const p = { module: 4, teeth: 20, pressureAngle: 20, backlash: bl };
+  const { r, rb, ra } = gearMetrics(p);
+  const sPF = 160;
+  const pts = gearContour(p, sPF);
+  const perTooth = 2 * sPF + 24;
+  const tooth0 = pts.slice(0, perTooth).map((q) => ({ rad: Math.hypot(q.x, q.y), ang: Math.atan2(q.y, q.x) }));
+  const onFlank = (q) => q.rad >= rb - 1e-6 && q.rad <= ra + 1e-6;
+  const trailing = tooth0.filter((q) => q.ang < 0 && onFlank(q)).sort((a, b) => a.rad - b.rad);
+  const leading = tooth0.filter((q) => q.ang > 0 && onFlank(q)).sort((a, b) => a.rad - b.rad);
+  const interp = (arr, rad) => {
+    for (let i = 0; i + 1 < arr.length; i++)
+      if (rad >= arr[i].rad && rad <= arr[i + 1].rad) {
+        const t = (rad - arr[i].rad) / (arr[i + 1].rad - arr[i].rad);
+        return arr[i].ang + (arr[i + 1].ang - arr[i].ang) * t;
+      }
+    throw new Error(`radius ${rad} not bracketed`);
+  };
+  const thickness = (interp(leading, r) - interp(trailing, r)) * r;
+  near(thickness, (Math.PI * p.module) / 2 - bl / 2, 2e-3 * r, 'thinned pitch thickness');
+});
+
+test('backlash thins the internal (ring) tooth the same way: pi*m/2 - b/2 at pitch', () => {
+  const bl = 0.5;
+  const p = { module: 4, teeth: 48, pressureAngle: 20, backlash: bl };
+  const { r, ra, rf } = internalGearMetrics(p);
+  const pts = internalGearContour(p, 400);
+  const win = Math.PI / p.teeth;
+  const tooth0 = pts
+    .map((q) => ({ rad: Math.hypot(q.x, q.y), ang: Math.atan2(q.y, q.x) }))
+    .filter((q) => Math.abs(q.ang) < win && q.rad >= ra - 1e-6 && q.rad < rf - 1e-6);
+  const left = tooth0.filter((q) => q.ang < 0).sort((a, b) => a.rad - b.rad);
+  const right = tooth0.filter((q) => q.ang > 0).sort((a, b) => a.rad - b.rad);
+  const interp = (arr, rad) => {
+    for (let i = 0; i + 1 < arr.length; i++)
+      if (rad >= arr[i].rad && rad <= arr[i + 1].rad) {
+        const t = (rad - arr[i].rad) / (arr[i + 1].rad - arr[i].rad);
+        return arr[i].ang + (arr[i + 1].ang - arr[i].ang) * t;
+      }
+    throw new Error(`radius ${rad} not bracketed`);
+  };
+  const thickness = (interp(right, r) - interp(left, r)) * r;
+  near(thickness, (Math.PI * p.module) / 2 - bl / 2, 1e-3 * r, 'thinned ring-tooth pitch thickness');
+});
+
+test('an absurd backlash degrades safely: clamped near-pointed tip, contours stay valid', () => {
+  // 10mm of backlash on small teeth is far beyond what the tip can give — the
+  // clamp must cap it at a near-pointed tooth, never fold the contour.
+  const pe = { module: 2, teeth: 12, pressureAngle: 20, backlash: 10 };
+  {
+    const { ra, r } = gearMetrics(pe);
+    const pts = gearContour(pe, 14);
+    let minEdge = Infinity;
+    let area2 = 0;
+    for (let i = 0; i < pts.length; i++) {
+      const a = pts[i];
+      const b = pts[(i + 1) % pts.length];
+      minEdge = Math.min(minEdge, Math.hypot(b.x - a.x, b.y - a.y));
+      area2 += a.x * b.y - b.x * a.y;
+      const rad = Math.hypot(a.x, a.y);
+      assert.ok(rad <= ra + 1e-6 && rad >= 0.2 * r - 1e-6, `external: radius ${rad} out of range`);
+    }
+    assert.ok(minEdge > 1e-6, `external: degenerate edge ${minEdge}`);
+    assert.ok(area2 > 0, 'external: not CCW');
+  }
+  const pi = { module: 4, teeth: 24, pressureAngle: 14.5, backlash: 10 };
+  {
+    const { ra, rf } = internalGearMetrics(pi);
+    const pts = internalGearContour(pi, 14);
+    let minEdge = Infinity;
+    let area2 = 0;
+    for (let i = 0; i < pts.length; i++) {
+      const a = pts[i];
+      const b = pts[(i + 1) % pts.length];
+      minEdge = Math.min(minEdge, Math.hypot(b.x - a.x, b.y - a.y));
+      area2 += a.x * b.y - b.x * a.y;
+      const rad = Math.hypot(a.x, a.y);
+      assert.ok(rad >= ra - 1e-6 && rad <= rf + 1e-6, `internal: radius ${rad} out of [ra,rf]`);
+    }
+    assert.ok(minEdge > 1e-6, `internal: degenerate edge ${minEdge}`);
+    assert.ok(area2 > 0, 'internal: not CCW');
+  }
+});

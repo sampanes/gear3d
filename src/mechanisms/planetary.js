@@ -31,12 +31,13 @@ export class Planetary {
     const pitchR = TAU / zR;
 
     // sun (centre, external)
+    const bl = p.backlash ?? 0;
     const sunBore = Math.min(Math.max(m * 0.85, 1.2), sunM.rf * 0.6);
-    this.sun = makeGear({ module: m, teeth: zS, pressureAngle: pa }, PALETTE.driver, { thickness: t, bore: sunBore });
+    this.sun = makeGear({ module: m, teeth: zS, pressureAngle: pa, backlash: bl }, PALETTE.driver, { thickness: t, bore: sunBore });
     this.group.add(this.sun);
 
     // ring (internal), centred
-    this.ring = makeRingGear({ module: m, teeth: zR, pressureAngle: pa }, PALETTE.shaft, { thickness: t });
+    this.ring = makeRingGear({ module: m, teeth: zR, pressureAngle: pa, backlash: bl }, PALETTE.shaft, { thickness: t });
     this.group.add(this.ring);
 
     // carrier (rotates), holding the planets and the arms + hub behind them
@@ -57,7 +58,7 @@ export class Planetary {
       const phase = phi + Math.PI - (0.5 - A) * pitchP;
       this.planetPhase.push(phase);
 
-      const planet = makeGear({ module: m, teeth: zP, pressureAngle: pa }, PALETTE.driven, { thickness: t, bore: planetBore });
+      const planet = makeGear({ module: m, teeth: zP, pressureAngle: pa, backlash: bl }, PALETTE.driven, { thickness: t, bore: planetBore });
       planet.position.set(rc * Math.cos(phi), rc * Math.sin(phi), 0);
       this.carrier.add(planet);
       this.planets.push(planet);

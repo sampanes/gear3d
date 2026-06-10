@@ -23,13 +23,13 @@ const config = {
   paused: false,
   wireframe: false,
   overlays: false, // pitch + base circles
-  spur: { gears: 3, t1: 12, t2: 24, t3: 18, t4: 15, t5: 30, module: 5, pressureAngle: 20, thickness: 8, helix: 0, spokes: 0 },
+  spur: { gears: 3, t1: 12, t2: 24, t3: 18, t4: 15, t5: 30, module: 5, pressureAngle: 20, thickness: 8, helix: 0, spokes: 0, backlash: 0 },
   geneva: { slots: 4, centerDistance: 100 },
   double: { amplitude: 35, size: 100 },
-  internal: { module: 4, pinionTeeth: 12, ringTeeth: 48, pressureAngle: 20, thickness: 8 },
-  planetary: { module: 4, sunTeeth: 12, planetTeeth: 12, planets: 3, pressureAngle: 20, thickness: 8, fixed: 'ring' },
-  bevel: { module: 4, pinionTeeth: 16, gearTeeth: 24, pressureAngle: 20, faceWidth: 14 },
-  sator: { cell: 40, thickness: 6, spinN: 4, indexClicks: 4, pushFrac: 0.62, drives: true, preset: 'Default', cells: defaultCells(), drive: { ratio: 2, driverTeeth: 10, pressureAngle: 20 } },
+  internal: { module: 4, pinionTeeth: 12, ringTeeth: 48, pressureAngle: 20, thickness: 8, backlash: 0 },
+  planetary: { module: 4, sunTeeth: 12, planetTeeth: 12, planets: 3, pressureAngle: 20, thickness: 8, fixed: 'ring', backlash: 0 },
+  bevel: { module: 4, pinionTeeth: 16, gearTeeth: 24, pressureAngle: 20, faceWidth: 14, backlash: 0 },
+  sator: { cell: 40, thickness: 6, spinN: 4, indexClicks: 4, pushFrac: 0.62, drives: true, preset: 'Default', cells: defaultCells(), drive: { ratio: 2, driverTeeth: 10, pressureAngle: 20, backlash: 0 } },
   export: { scale: 1.0 }, // uniform STL multiplier; model units are mm
 };
 

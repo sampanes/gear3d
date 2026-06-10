@@ -18,7 +18,7 @@ export class SpurTrain {
     let x = 0;
     let prevR = 0;
     for (let i = 0; i < this.teeth.length; i++) {
-      const gp = { module: p.module, teeth: this.teeth[i], pressureAngle: p.pressureAngle };
+      const gp = { module: p.module, teeth: this.teeth[i], pressureAngle: p.pressureAngle, backlash: p.backlash ?? 0 };
       const m = gearMetrics(gp);
       if (i > 0) x += prevR + m.r; // center distance r_{i-1} + r_i
       prevR = m.r;

@@ -411,6 +411,12 @@ cellFeasibility(cell, neighbours, board) -> {
 
 ## Phased implementation plan
 
+> **Ordering note (2026-06-09).** The **print pack** track (see
+> [roadmap.md](roadmap.md)) runs ahead of Phases 3–4: a feasibility solver is
+> screen-side polish until the parts it validates can actually be printed
+> (per-part export, backlash, assembly hardware). Phases 0–2 stay cheap plumbing
+> and may interleave with the print pack.
+
 Each phase is independently testable and **leaves the default board byte-identical**
 until the very feature being added is exercised. Style follows the repo:
 adversarial breakers + a completeness critic on the load-bearing phases, tests read

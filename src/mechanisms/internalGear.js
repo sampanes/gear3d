@@ -26,12 +26,13 @@ export class InternalGear {
     this.ringPhase = Math.PI / this.zr; // rotate a gap to face the pinion at rest
 
     // ring gear (driven), centred at the origin
-    this.ring = makeRingGear({ module: m, teeth: this.zr, pressureAngle: pa }, PALETTE.driven, { thickness: t });
+    const bl = p.backlash ?? 0;
+    this.ring = makeRingGear({ module: m, teeth: this.zr, pressureAngle: pa, backlash: bl }, PALETTE.driven, { thickness: t });
     this.group.add(this.ring);
 
     // pinion (driver), offset along +x so it meshes there; a tooth points +x at rest
     const bore = Math.min(Math.max(m * 0.85, 1.2), pinM.rf * 0.6);
-    this.pinion = makeGear({ module: m, teeth: this.zp, pressureAngle: pa }, PALETTE.driver, { thickness: t, bore });
+    this.pinion = makeGear({ module: m, teeth: this.zp, pressureAngle: pa, backlash: bl }, PALETTE.driver, { thickness: t, bore });
     this.pinion.position.set(this.d, 0, 0);
     this.group.add(this.pinion);
 
