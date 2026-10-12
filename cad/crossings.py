@@ -14,6 +14,13 @@ Styles:
   blades  -- many thin crescent blades (steampunk turbine)
   gothic  -- pointed lancet windows (rose-window tracery) with oculi between
              the arch tops
+  ringed  -- clock wheel: straight tapered spokes to a middle ring, twice as
+             many (offset) from the ring to the rim
+  trefoil / quatrefoil -- a ring of gothic foil windows
+  flame   -- flamboyant-gothic mouchettes: curved daggers, pointed at the hub,
+             round-headed near the rim (curl set by SWEEP_DEG)
+  straight -- classic machine-wheel spokes, tapered from hub to rim
+  holes   -- pierced disc: a ring of big round holes, small ones nestled between
 """
 
 import math
@@ -165,7 +172,12 @@ def _spoke_openings(style, count, r_in, r_out):
             minus.append((x - nx * h, y - ny * h))
         return _clip_radial(plus, r_in, r_out), _clip_radial(minus, r_in, r_out)
 
-    all_edges = [edges(k) for k in range(count)]
+    return _between([edges(k) for k in range(count)], r_in, r_out)
+
+
+def _between(all_edges, r_in, r_out):
+    """Openings between neighbouring spokes; all_edges = [(leading, trailing), ...] by angle."""
+    count = len(all_edges)
     holes = []
     for k in range(count):
         a = all_edges[k][0]                  # leading edge of spoke k
@@ -317,6 +329,129 @@ def _spandrel_triangles(holes, count, r_in, r_lim, wall):
         return []
     shape = [(x + rc, y) for (x, y) in _rounded_triangle(size, 0.35 * size)]
     return [_rotate(shape, axis + TAU * k / count) for k in range(count)]
+
+
+# ---- more tracery: ringed clock wheel, foils, flames ------------------------------
+
+def _ray_edges(angle, r0, r1, w0, w1):
+    """(leading, trailing) edges of a straight spoke along `angle`, width w0 at r0 -> w1 at r1."""
+    c, s = math.cos(angle), math.sin(angle)
+    plus, minus = [], []
+    for i in range(401):
+        u = (r1 + 5.0) * i / 400
+        t = min(max((u - r0) / (r1 - r0), 0.0), 1.0)
+        h = (w0 + (w1 - w0) * t) / 2
+        plus.append((u * c - h * s, u * s + h * c))
+        minus.append((u * c + h * s, u * s - h * c))
+    return _clip_radial(plus, r0, r1), _clip_radial(minus, r0, r1)
+
+
+def _ringed_openings(count, r_in, r_out):
+    w = SPOKE_W
+    r_mid = (r_in + r_out) / 2
+    a_lo, a_hi = r_mid - w / 2, r_mid + w / 2
+    inner = [_ray_edges(TAU * k / count, r_in, a_lo, w * (1 + FLARE), w) for k in range(count)]
+    n2 = 2 * count
+    outer = [_ray_edges(TAU * (k + 0.5) / n2, a_hi, r_out, w * 0.8, w * (1 + FLARE / 2))
+             for k in range(n2)]
+    return _between(inner, r_in, a_lo) + _between(outer, a_hi, r_out)
+
+
+def _straight_openings(count, r_in, r_out):
+    w = SPOKE_W
+    spokes = [_ray_edges(TAU * k / count, r_in, r_out, w * (1 + FLARE), w * (1 + FLARE / 3))
+              for k in range(count)]
+    return _between(spokes, r_in, r_out)
+
+
+def _holes_openings(count, r_in, r_out):
+    w = SPOKE_W
+    sn = math.sin(math.pi / count)
+    # outer ring: biggest circles that keep a w wall to each other and w/2 to the rim
+    big = min(((r_out - w / 2) * sn - w / 2) / (1 + sn), (r_out - r_in - w) / 2)
+    rc_big = r_out - w / 2 - big
+    holes = [_circle(rc_big * math.cos(TAU * k / count), rc_big * math.sin(TAU * k / count), big, 2.0)
+             for k in range(count)]
+    # inner ring, half a pitch over: as big as the walls to the hub and big holes allow
+    best = (0.0, 0.0)
+    for i in range(400):
+        rc = r_in + (rc_big - r_in) * i / 399
+        gap = math.hypot(rc * math.cos(math.pi / count) - rc_big, rc * math.sin(math.pi / count))
+        rho = min(rc - r_in - w / 2, gap - big - w, rc * sn - w / 2)
+        if rho > best[0]:
+            best = (rho, rc)
+    rho, rc = best
+    if rho >= 2.0:
+        holes += [_circle(rc * math.cos(TAU * (k + 0.5) / count), rc * math.sin(TAU * (k + 0.5) / count),
+                          rho, 3.0) for k in range(count)]
+    return holes
+
+
+def _foil(lobes, rho, c, rot):
+    """Outline of a gothic foil: `lobes` circles of radius rho, centers c from the origin (c < rho)."""
+    centers = [(c * math.cos(rot + TAU * i / lobes), c * math.sin(rot + TAU * i / lobes))
+               for i in range(lobes)]
+    pts = []
+    for j in range(720):
+        dx, dy = math.cos(TAU * j / 720), math.sin(TAU * j / 720)
+        far = 0.0
+        for cx, cy in centers:
+            b = dx * cx + dy * cy
+            disc = b * b - (cx * cx + cy * cy - rho * rho)
+            if disc >= 0:
+                far = max(far, b + math.sqrt(disc))
+        pts.append((far * dx, far * dy))
+    return pts
+
+
+def _foil_openings(lobes, count, r_in, r_out):
+    w = SPOKE_W
+    rc = (r_in + r_out) / 2
+    ext = min((r_out - r_in) / 2 - w / 2, rc * math.sin(math.pi / count) - w / 2)
+    rho = ext / 1.8
+    holes = []
+    for k in range(count):
+        a = TAU * k / count
+        f = _smooth(_foil(lobes, rho, 0.8 * rho, a), min(FILLET, 1.0))
+        holes.append([(x + rc * math.cos(a), y + rc * math.sin(a)) for (x, y) in f])
+    return holes
+
+
+def _flame_openings(count, r_in, r_out):
+    w = SPOKE_W
+    sweep = math.radians(SWEEP_DEG)
+    L = r_out - r_in - w / 2
+    # round head as big as the gap between neighbours allows near the rim
+    head = min(L / 4, (r_out - w / 2 - L / 8) * math.sin(math.pi / count) - w / 2)
+    s_head = L - head
+    n = 240
+    holes = []
+    for k in range(count):
+        phi = TAU * k / count
+        axis = []
+        for i in range(n + 1):
+            t = i / n
+            r = r_in + L * t
+            th = phi + sweep * t * t
+            axis.append((r * math.cos(th), r * math.sin(th)))
+        left, right = [], []
+        for i in range(n + 1):
+            sl = L * i / n
+            if sl >= s_head:
+                hw = head * math.sqrt(max(0.0, 1 - ((sl - s_head) / head) ** 2))
+            else:
+                hw = head * (sl / s_head) ** 1.5
+            a = axis[max(i - 1, 0)]
+            b = axis[min(i + 1, n)]
+            tx, ty = b[0] - a[0], b[1] - a[1]
+            ln = math.hypot(tx, ty)
+            nx, ny = -ty / ln, tx / ln
+            x, y = axis[i]
+            left.append((x + nx * hw, y + ny * hw))
+            right.append((x - nx * hw, y - ny * hw))
+        poly = left + right[::-1][1:-1]
+        holes.append(_smooth(poly, min(FILLET, 1.5)))
+    return holes
 
 
 # ---- build ----------------------------------------------------------------------
@@ -472,8 +607,20 @@ def _build(gear, style, count):
     r_in, r_out = hub_r, bore_r - lip
     if style == "gothic":
         holes = _gothic_openings(count, r_in, r_out, bore_r - lip)
-    else:
+    elif style == "ringed":
+        holes = _ringed_openings(count, r_in, r_out)
+    elif style in ("trefoil", "quatrefoil"):
+        holes = _foil_openings(3 if style == "trefoil" else 4, count, r_in, r_out)
+    elif style == "flame":
+        holes = _flame_openings(count, r_in, r_out)
+    elif style == "straight":
+        holes = _straight_openings(count, r_in, r_out)
+    elif style == "holes":
+        holes = _holes_openings(count, r_in, r_out)
+    elif style in ("spiral", "scurve", "blades"):
         holes = _spoke_openings(style, count, r_in, r_out)
+    else:
+        raise ValueError(f"unknown crossings style: {style}")
 
     # outer edge hides inside the gear rim and the bearing wall must stay straight,
     # so only the decorative openings get rounded edges

@@ -26,7 +26,7 @@ Ratio check: (64/96) * (96/16) = 4 relative turns per board turn.
 | Pressure angle | 25 deg | thicker roots on 16T (20 deg undercuts below 17T); ~28% more radial load than 20 |
 | Helix angle | 0 (spur) | drop-in assembly, no axial thrust, no handedness to manage |
 | Rim under teeth | >= 8 mm | stiff enough that a large thin wheel does not flex out of mesh; 96T uses bore radius 97 (root radius 105.2) |
-| Crossings | `cad/crossings.py` | vary the style between neighbouring gears. 96T and 64T letters: `scurve` x6 with 22.3 bearing hole; middle 64T: `gothic` x8, rounded-triangle spandrels, solid hub (no hole), flat back (ALIGN back), taper 17 mm at rim -> 8.5 mm at hub. All: 1.2 mm rounded edges, overlap rim 1 mm (export gear + crossings as one STL) |
+| Crossings | `cad/crossings.py` | vary the style between neighbouring gears. 96T and the near 64T letters: `scurve` x6 with 22.3 bearing hole; far 64T letters: `ringed` x5; middle 64T: `gothic` x8, rounded-triangle spandrels, solid hub (no hole), flat back (ALIGN back), taper 17 mm at rim -> 8.5 mm at hub. All: 1.2 mm rounded edges, overlap rim 1 mm (export gear + crossings as one STL) |
 | Backlash / fit | TBD | gear3d `sator.fit` default is 0.25 mm; settle with a printed fit coupon |
 
 ## Blender scene (`cad/sator_hand_build.blend`)
@@ -44,17 +44,28 @@ Ratio check: (64/96) * (96/16) = 4 relative turns per board turn.
 - `Gear_Letter_64T_N` / `_W` mesh off the N / W idlers (top layer) at (0, 180, 8) and
   (-180, 0, 8): each concentric with the 96T below it (90 + 90 = 180). 22.3 bearing hole,
   same `scurve` x6 crossings as the 96T so each stacked pair matches.
+- `Gear_Letter_64T_N2` / `_W2` mesh the far side of each 96T (bottom layer) at (0, 360, -8)
+  and (-360, 0, -8), `ringed` x5 crossings. Fixed middle -> 96T -> 64T is 64:64 through two
+  meshes, so these letters stay upright like the idler-driven ones.
+- Viewport: scene units are mm, so views clip at `clip_end`; set to 20000 (20 m) with
+  `clip_start` 0.5 in every workspace. The Shading workspace uses Material Preview (slow);
+  work in Layout (Solid).
 - Modeled backlash is 0 (teeth touch exactly); printed parts need the fit value from the coupon.
 
 ## Printing: slice ONLY `cad/export/*.stl`
 
+- **Slicer supports ON for the middle double-stack gear.** The top tooth layer overhangs the
+  spacer groove flat (z 4, 5.35 mm out from the groove floor at r 68.9 to the tips at r 74.25)
+  and droops without support. (Alternative if supports are a pain: slope the groove ceiling
+  at 45 deg, at the cost of groove room at the root.)
 - Make them with `sator_gears.export_stl(gear)` -> `cad/export/<gear name>.stl`. It unions the
   gear with its crossings into ONE closed solid (and reports shells = 1, non-manifold = 0).
 - Never slice a hand export of gear + crossings: those are two shells. The slicer treats each
   shell as a part and gives both perimeters, so the 1 mm overlap prints as a seam of walls
   instead of bonded infill (weak ring where the spokes meet the rim).
-- Identical gears share one STL: `Gear_96T.stl` (all 96T), `Gear_Letter_64T_N.stl` (all
-  letter gears), `Gear_Idler_16T_N.stl` (all idlers). Print as many as the scene has.
+- Identical gears share one STL: `Gear_96T.stl` (all 96T), `Gear_Letter_64T_N.stl` (scurve
+  letters), `Gear_Letter_64T_N2.stl` (ringed letters), `Gear_Idler_16T_N.stl` (all idlers).
+  Print as many as the scene has.
 - Re-export after changing a gear or its crossings; the STLs do not update themselves.
 
 ## Repo hygiene for the binaries
