@@ -63,6 +63,13 @@ Ratio check: (64/96) * (96/16) = 4 relative turns per board turn.
   - Each step narrows a wall by 2 x (STEP_INSET + rounding) in total; `crossings.py` refuses a
     build whose top walls would be under 0.8 mm.
   Layered crossings keep every step on the top face, so they print support-free.
+- Rim decoration (all crossing gears): inner rim teeth (`RIM_TEETH` = the gear's tooth count,
+  `RIM_TEETH_H=2.5`, lined up with the outer teeth, flush with the step top) where a window
+  meets the rim, kept clear of the spokes; plus `sator_gears.add_rim_dots(gear)` -- a ring of
+  2.4 mm x 1.2 mm deep dimples in the rim top face, one per tooth (live Boolean). The middle
+  gear gets dots only: its gothic web is solid at the rim, so there is no window edge for teeth.
+- The middle gear mesh is regenerated from its PrecisionGears settings (sharp inner rim edge;
+  a hand-made rounding there was removed).
 - Reference rods (collection `Reference Rods`, red, unselectable, not exported): 8.1 mm rods
   at all 25 letter centers, named `Rod_R<row>C<col>_<letter>`. The letter grid pitch is
   180 mm: it is both the 64T-96T center distance (72 + 108) and middle -> 16T idler -> letter

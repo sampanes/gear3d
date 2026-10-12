@@ -5,6 +5,7 @@ add_groove()   -- cut a tooth-free groove (split one tall gear into stacked laye
 export_stl()   -- union a gear with its crossings into one solid STL for the slicer
 mesh_with()    -- place a gear at the correct center distance, rotated so teeth interlock
 tooth_phase()  -- angle of a tooth center on a gear
+add_rim_dots() -- decorative ring of dimples in the rim top face
 
 Shared settings are copied from a finished template gear so every gear matches
 (module, pressure angle, shift, taper, tip relief, bore style, ...). The numbers
@@ -111,6 +112,52 @@ def add_groove(ob, z_center, width, depth_below_root=0.3):
     cutter.hide_render = True
     cutter.hide_set(True)
     mod = ob.modifiers.get("Layer Groove") or ob.modifiers.new("Layer Groove", "BOOLEAN")
+    mod.operation = "DIFFERENCE"
+    mod.solver = "EXACT"
+    mod.object = cutter
+    return cutter
+
+
+def add_rim_dots(ob, count=None, dia=2.4, depth=1.2, segments=16):
+    """Ring of round dimples in the rim's top face, midway between bore and tooth roots.
+
+    Decorative only (blind holes, the rim keeps its strength). One dot per tooth by
+    default, lined up with the teeth. Boolean modifier, stays live; count=0 removes it.
+    """
+    p = props(ob)
+    name = f"{ob.name} Rim Dots"
+    old = bpy.data.objects.get(name)
+    if old is not None:
+        old_me = old.data
+        bpy.data.objects.remove(old)
+        bpy.data.meshes.remove(old_me)
+    mod = ob.modifiers.get("Rim Dots")
+    if count == 0:
+        if mod is not None:
+            ob.modifiers.remove(mod)
+        return None
+    count = count or p.teeth
+    r = (p.bore_size + root_radius(p)) / 2
+    z_top = max(v[2] for v in ob.bound_box)
+    phase = tooth_phase(ob) - ob.rotation_euler.z
+    me = bpy.data.meshes.new(name)
+    bm = bmesh.new()
+    for k in range(count):
+        a = phase + 2 * math.pi * k / count
+        res = bmesh.ops.create_cone(bm, cap_ends=True, segments=segments, radius1=dia / 2,
+                                    radius2=dia / 2, depth=depth + 1.0)
+        bmesh.ops.translate(bm, verts=res["verts"],
+                            vec=(r * math.cos(a), r * math.sin(a), z_top - depth + (depth + 1.0) / 2))
+    bm.to_mesh(me)
+    bm.free()
+    cutter = bpy.data.objects.new(name, me)
+    for c in ob.users_collection:
+        c.objects.link(cutter)
+    cutter.parent = ob
+    cutter.display_type = "WIRE"
+    cutter.hide_render = True
+    cutter.hide_set(True)
+    mod = mod or ob.modifiers.new("Rim Dots", "BOOLEAN")
     mod.operation = "DIFFERENCE"
     mod.solver = "EXACT"
     mod.object = cutter

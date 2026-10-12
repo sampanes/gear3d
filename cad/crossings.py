@@ -54,6 +54,8 @@ LAYERS = 0           # layered look: raised steps on top of a thin base web (0 =
 BASE_T = 3.5         # layered: base web thickness (flat on the bed)
 STEP_T = 2.0         # layered: height of each raised step
 STEP_INSET = 1.5     # layered: each step is this much narrower (per side) than the one below
+RIM_TEETH = 0        # layered: decorative inner teeth along the rim edge, count (0 = off; try the gear's tooth count)
+RIM_TEETH_H = 2.5    # layered: how far the inner teeth reach in from the bore
 # ========================
 
 TAU = 2.0 * math.pi
@@ -485,11 +487,11 @@ def _flame_openings(count, r_in, r_out):
 
 # ---- build ----------------------------------------------------------------------
 
-def _grow_hole(loop, d, r_max=None, r_min=None):
+def _grow_hole(loop, d, r_max=None, r_min=None, fixed=None):
     """Offset an opening outline away from its interior by d (enlarges the opening).
 
     Points are kept inside r_max (and outside r_min) so openings never cross the outer
-    boundary (or the hub boss).
+    boundary (or the hub boss). Points flagged in `fixed` stay put (inner rim teeth).
     """
     if d == 0:
         return loop
@@ -499,6 +501,9 @@ def _grow_hole(loop, d, r_max=None, r_min=None):
     out = []
     for i in range(n):
         (ax, ay), (bx, by), (cx, cy) = loop[i - 1], loop[i], loop[(i + 1) % n]
+        if fixed is not None and fixed[i]:
+            out.append((bx, by))
+            continue
         tx, ty = cx - ax, cy - ay
         ln = math.hypot(tx, ty)
         x, y = bx + sgn * ty / ln * d, by - sgn * tx / ln * d
@@ -608,6 +613,71 @@ def _round_over(z_top, d0, b, segments):
             for a in (k * (math.pi / 2) / segments for k in range(segments + 1))]
 
 
+def _rim_teeth(hole, bore_r, phase, margin):
+    """Give an opening a toothed edge where it meets the rim; returns (outline, fixed flags).
+
+    Only the stretch of outline running along the bore gets teeth, and only teeth that
+    sit `margin` mm clear of the spokes, so the growing step edges never reach them.
+    Rounded trapezoid teeth, top land ~36% of the pitch; between teeth the outline sits
+    0.3 mm inside the rim (hidden, no surface coincident with the gear bore).
+    """
+    pts = _resample(hole, 0.3)
+    n = len(pts)
+    on_rim = [math.hypot(x, y) >= bore_r - 0.5 for x, y in pts]
+    fixed = [False] * n
+    if all(on_rim) or not any(on_rim):
+        return pts, fixed
+    start = next(i for i in range(n) if not on_rim[i])
+    order = [(start + k) % n for k in range(n)]
+    runs, cur = [], []
+    for i in order:
+        if on_rim[i]:
+            cur.append(i)
+        elif cur:
+            runs.append(cur)
+            cur = []
+    if cur:
+        runs.append(cur)
+    pitch = TAU / RIM_TEETH
+    for run in runs:
+        ang = [math.atan2(pts[run[0]][1], pts[run[0]][0])]
+        for i in run[1:]:
+            a = math.atan2(pts[i][1], pts[i][0])
+            ang.append(ang[-1] + (a - ang[-1] + math.pi) % TAU - math.pi)
+        lo, hi = min(ang) + margin / bore_r, max(ang) - margin / bore_r
+        for i, a in zip(run, ang):
+            if not lo <= a <= hi:
+                continue
+            k = round((a - phase) / pitch)
+            c = phase + k * pitch
+            t = 0.0
+            if c - 0.32 * pitch >= lo and c + 0.32 * pitch <= hi:
+                t = min(max((0.32 - abs(a - c) / pitch) / 0.14, 0.0), 1.0)
+            r = bore_r + 0.3 - (RIM_TEETH_H + 0.3) * t * t * (3 - 2 * t)
+            pts[i] = (r * math.cos(a), r * math.sin(a))
+            fixed[i] = True
+    return pts, fixed
+
+
+def _tooth_phase(gear, props):
+    """Local angle (rad) of an outer tooth center, so inner rim teeth line up with them."""
+    if RIM_TEETH <= 0:
+        return 0.0
+    pitch = TAU / props.teeth
+    ev = gear.evaluated_get(bpy.context.evaluated_depsgraph_get())
+    me = ev.to_mesh()
+    rs = [(v.co.x, v.co.y) for v in me.vertices]
+    r_tip = max(math.hypot(x, y) for x, y in rs)
+    sx = sy = 0.0
+    for x, y in rs:
+        if math.hypot(x, y) > r_tip - 0.05:
+            a = math.atan2(y, x) * TAU / pitch
+            sx += math.cos(a)
+            sy += math.sin(a)
+    ev.to_mesh_clear()
+    return math.atan2(sy, sx) * pitch / TAU
+
+
 def _check_walls(loops, min_wall=0.8):
     """Raise if two openings come closer than min_wall (top step walls eaten away)."""
     from mathutils import kdtree
@@ -623,7 +693,7 @@ def _check_walls(loops, min_wall=0.8):
                                  "raise SPOKE_W or lower STEP_INSET / LAYERS")
 
 
-def _layered(holes, height, bore_r, hub_r, segments):
+def _layered(holes, height, bore_r, hub_r, segments, teeth_phase=0.0):
     """Terraced crossings: thin base web, narrower raised steps, a stepped bearing boss.
 
     Built as ONE welded loft (no booleans): every outline gets a wall with its own (z, d)
@@ -655,6 +725,11 @@ def _layered(holes, height, bore_r, hub_r, segments):
     b_boss = max(0.0, min(BEVEL, 0.8, (boss_r - collar_r) / 2, (z_boss - z_body) / 2 - 0.1))
     b_col = max(0.0, min(BEVEL, (collar_r - hole_r) / 2 - 0.2, (h2 - z_boss) - 0.2))
     r_max, r_min = bore_r + RIM_OVERLAP / 2, boss_r + 0.6
+    fixed = [None] * len(holes)
+    if RIM_TEETH > 0:
+        margin = STEP_INSET * LAYERS + BEVEL + 1.0  # keep teeth clear of the growing spoke edges
+        for i, h in enumerate(holes):
+            holes[i], fixed[i] = _rim_teeth(h, bore_r, teeth_phase, margin)
 
     outer = _circle(0, 0, bore_r + RIM_OVERLAP, 1.0)
     boss = _circle(0, 0, boss_r, 1.0)
@@ -664,20 +739,21 @@ def _layered(holes, height, bore_r, hub_r, segments):
     col_lv = [(z_boss, 0.0)] + _round_over(h2, 0.0, b_col, segments)
 
     # (loop, profile, sign, r_max, r_min); sign -1 = material inside the loop
-    walls = [(outer, [(-h2, 0.0), (z_body, 0.0)], 1, None, None),
-             (boss, boss_lv, -1, None, None),
-             (collar, col_lv, -1, None, None)]
-    walls += [(h, lv, 1, r_max, r_min) for h in holes]
+    walls = [(outer, [(-h2, 0.0), (z_body, 0.0)], 1, None, None, None),
+             (boss, boss_lv, -1, None, None, None),
+             (collar, col_lv, -1, None, None, None)]
+    walls += [(h, lv, 1, r_max, r_min, fx) for h, fx in zip(holes, fixed)]
     if bore:
-        walls.append((bore, [(-h2, 0.0), (h2, 0.0)], 1, None, None))
+        walls.append((bore, [(-h2, 0.0), (h2, 0.0)], 1, None, None, None))
 
-    def ring(loop, d, sg, rmax, rmin):
-        return _grow_hole(loop, sg * d, rmax, rmin)
+    def ring(loop, d, sg, rmax, rmin, fx=None):
+        return _grow_hole(loop, sg * d, rmax, rmin, fx)
 
-    _check_walls([ring(h, lv[-1][1], 1, r_max, r_min) for h in holes])
-    caps = {-h2: [ring(outer, 0, 1, None, None)] + [ring(h, lv[0][1], 1, r_max, r_min) for h in holes],
+    _check_walls([ring(h, lv[-1][1], 1, r_max, r_min, fx) for h, fx in zip(holes, fixed)])
+    caps = {-h2: [ring(outer, 0, 1, None, None)]
+                  + [ring(h, lv[0][1], 1, r_max, r_min, fx) for h, fx in zip(holes, fixed)],
             z_body: [ring(outer, 0, 1, None, None), ring(boss, 0, -1, None, None)]
-                    + [ring(h, lv[-1][1], 1, r_max, r_min) for h in holes],
+                    + [ring(h, lv[-1][1], 1, r_max, r_min, fx) for h, fx in zip(holes, fixed)],
             z_boss: [ring(boss, boss_lv[-1][1], -1, None, None), ring(collar, 0, -1, None, None)],
             h2: [ring(collar, col_lv[-1][1], -1, None, None)]}
     if bore:
@@ -685,8 +761,8 @@ def _layered(holes, height, bore_r, hub_r, segments):
         caps[h2].append(ring(bore, 0, 1, None, None))
 
     bm = bmesh.new()
-    for loop, prof, sg, rmax, rmin in walls:
-        rings = [[bm.verts.new((x, y, z)) for (x, y) in ring(loop, d, sg, rmax, rmin)] for z, d in prof]
+    for loop, prof, sg, rmax, rmin, fx in walls:
+        rings = [[bm.verts.new((x, y, z)) for (x, y) in ring(loop, d, sg, rmax, rmin, fx)] for z, d in prof]
         n = len(loop)
         for ra, rb in zip(rings, rings[1:]):
             for k in range(n):
@@ -712,7 +788,8 @@ def _layered(holes, height, bore_r, hub_r, segments):
 
 SETTINGS = ("BEARING_HOLE_D", "HUB_WALL", "HUB_MIN_R", "SPOKE_W", "SWEEP_DEG", "FLARE", "FILLET",
             "RIM_OVERLAP", "RIM_LIP", "BEVEL", "BEVEL_SEGMENTS", "SPANDREL",
-            "THICK_RIM", "THICK_HUB", "ALIGN", "LAYERS", "BASE_T", "STEP_T", "STEP_INSET")
+            "THICK_RIM", "THICK_HUB", "ALIGN", "LAYERS", "BASE_T", "STEP_T", "STEP_INSET",
+            "RIM_TEETH", "RIM_TEETH_H")
 
 
 def build(gear, style=None, count=None, **settings):
@@ -783,7 +860,7 @@ def _build(gear, style, count):
                 return h2 - t, h2
             return -h2, -h2 + t
     if LAYERS > 0:
-        me = _layered(holes, height, bore_r, hub_r, max(1, BEVEL_SEGMENTS))
+        me = _layered(holes, height, bore_r, hub_r, max(1, BEVEL_SEGMENTS), _tooth_phase(gear, props))
     else:
         me = _solid(plain, holes, height, bevel, max(1, BEVEL_SEGMENTS), bore_r + RIM_OVERLAP / 2, surface)
 
