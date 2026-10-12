@@ -6,6 +6,7 @@ export_stl()   -- union a gear with its crossings into one solid STL for the sli
 mesh_with()    -- place a gear at the correct center distance, rotated so teeth interlock
 tooth_phase()  -- angle of a tooth center on a gear
 add_rim_dots() -- decorative ring of dimples in the rim top face
+fit_coupon()   -- labelled test bar of hole sizes (find the bearing press fit)
 
 Shared settings are copied from a finished template gear so every gear matches
 (module, pressure angle, shift, taper, tip relief, bore style, ...). The numbers
@@ -162,6 +163,97 @@ def add_rim_dots(ob, count=None, dia=2.4, depth=1.2, segments=16):
     mod.solver = "EXACT"
     mod.object = cutter
     return cutter
+
+
+def fit_coupon(name, sizes, wall=3.0, thick=5.0, label_h=4.0, location=(0, 0, 0)):
+    """Flat test bar with one hole per diameter in `sizes`, each labelled in the top face.
+
+    Print it before a gear to find the hole that grips a bearing; holes are cut the same
+    way as the gears' (fine polygon, straight wall, no chamfer) so the result carries over.
+    Lives in the "Test Prints" collection; export with export_stl().
+    """
+    old = bpy.data.objects.get(name)
+    if old is not None:
+        old_me = old.data
+        bpy.data.objects.remove(old)
+        bpy.data.meshes.remove(old_me)
+    d_max = max(sizes)
+    pitch = d_max + wall
+    w_hole = d_max + 2 * wall
+    width = w_hole + label_h + wall
+    length = pitch * (len(sizes) - 1) + w_hole
+    corner = 4.0
+    y0, y1 = -w_hole / 2, -w_hole / 2 + width  # labels sit on the +y side of the holes
+    x0, x1 = -length / 2, length / 2
+
+    # plate: rounded rectangle, extruded
+    outline = []
+    for cx, cy, a0 in ((x1 - corner, y0 + corner, -90), (x1 - corner, y1 - corner, 0),
+                       (x0 + corner, y1 - corner, 90), (x0 + corner, y0 + corner, 180)):
+        for k in range(9):
+            a = math.radians(a0 + 90 * k / 8)
+            outline.append((cx + corner * math.cos(a), cy + corner * math.sin(a)))
+    me = bpy.data.meshes.new(name)
+    bm = bmesh.new()
+    bot = [bm.verts.new((x, y, 0.0)) for x, y in outline]
+    top = [bm.verts.new((x, y, thick)) for x, y in outline]
+    bm.faces.new(bot[::-1])
+    bm.faces.new(top)
+    n = len(outline)
+    for k in range(n):
+        m = (k + 1) % n
+        bm.faces.new((bot[k], bot[m], top[m], top[k]))
+    bm.to_mesh(me)
+    bm.free()
+    ob = bpy.data.objects.new(name, me)
+    _collection("Test Prints").objects.link(ob)
+
+    # cutter: through holes + label text sunk 0.6 mm into the top face
+    cme = bpy.data.meshes.new(name + " Cutter")
+    bm = bmesh.new()
+    xs = [x0 + w_hole / 2 + pitch * i for i in range(len(sizes))]
+    for x, d in zip(xs, sizes):
+        res = bmesh.ops.create_cone(bm, cap_ends=True, segments=256, radius1=d / 2,
+                                    radius2=d / 2, depth=thick + 2)
+        bmesh.ops.translate(bm, verts=res["verts"], vec=(x, 0, thick / 2))
+        cu = bpy.data.curves.new("_label", "FONT")
+        cu.body = f"{d:.1f}"
+        cu.size = label_h * 1.35  # font size -> digit height ~ label_h
+        cu.align_x, cu.align_y = "CENTER", "CENTER"
+        cu.extrude = 0.8
+        tob = bpy.data.objects.new("_label", cu)
+        bpy.context.scene.collection.objects.link(tob)
+        bpy.context.view_layer.update()
+        tme = bpy.data.meshes.new_from_object(tob.evaluated_get(bpy.context.evaluated_depsgraph_get()))
+        bpy.data.objects.remove(tob)
+        bpy.data.curves.remove(cu)
+        tbm = bmesh.new()
+        tbm.from_mesh(tme)
+        bpy.data.meshes.remove(tme)
+        bmesh.ops.translate(tbm, verts=tbm.verts[:], vec=(x, w_hole / 2 + label_h / 2 + 0.5, thick + 0.2))
+        tmp = bpy.data.meshes.new("_label")
+        tbm.to_mesh(tmp)
+        tbm.free()
+        bm.from_mesh(tmp)
+        bpy.data.meshes.remove(tmp)
+    bm.to_mesh(cme)
+    bm.free()
+    cutter = bpy.data.objects.new(name + " Cutter", cme)
+    _collection("Test Prints").objects.link(cutter)
+    mod = ob.modifiers.new("Cut", "BOOLEAN")
+    mod.operation = "DIFFERENCE"
+    mod.solver = "EXACT"
+    mod.object = cutter
+    bpy.context.view_layer.update()
+    final = bpy.data.meshes.new_from_object(ob.evaluated_get(bpy.context.evaluated_depsgraph_get()))
+    ob.modifiers.remove(mod)
+    bpy.data.objects.remove(cutter)
+    bpy.data.meshes.remove(cme)
+    ob.data = final
+    bpy.data.meshes.remove(me)
+    final.name = name
+    ob.location = location
+    return ob
 
 
 def export_stl(gear, path=None):

@@ -26,7 +26,7 @@ Ratio check: (64/96) * (96/16) = 4 relative turns per board turn.
 | Pressure angle | 25 deg | thicker roots on 16T (20 deg undercuts below 17T); ~28% more radial load than 20 |
 | Helix angle | 0 (spur) | drop-in assembly, no axial thrust, no handedness to manage |
 | Rim under teeth | >= 8 mm | stiff enough that a large thin wheel does not flex out of mesh; 96T uses bore radius 97 (root radius 105.2) |
-| Crossings | `cad/crossings.py` | vary the style between neighbouring gears; layered (raised steps on a thin base web, see below). 96T: `scurve` x6, 2 steps; near (front) 64T letters: `scurve` x4, 1 step; far 64T letters: `ringed` x5, 2 steps; all with 22.3 bearing hole; middle 64T: `gothic` x8, rounded-triangle spandrels, 2 steps on an 8 mm base web, solid hub drum full height (no hole). All: 1.2 mm rounded edges, overlap rim 1 mm (export gear + crossings as one STL) |
+| Crossings | `cad/crossings.py` | vary the style between neighbouring gears; layered (raised steps on a thin base web, see below). 96T: `scurve` x6, 2 steps; near (front) 64T letters: `scurve` x4, 1 step; far 64T letters: `ringed` x5, 2 steps; all with 21.9 bearing hole; middle 64T: `gothic` x8, rounded-triangle spandrels, 2 steps on an 8 mm base web, solid hub drum full height (no hole). All: 1.2 mm rounded edges, overlap rim 1 mm (export gear + crossings as one STL) |
 | Backlash / fit | TBD | gear3d `sator.fit` default is 0.25 mm; settle with a printed fit coupon |
 
 ## Blender scene (`cad/sator_hand_build.blend`)
@@ -39,10 +39,10 @@ Ratio check: (64/96) * (96/16) = 4 relative turns per board turn.
   -1.875 deg to mesh.
 - 16T idlers (top layer) line up with the 96T contact directions (N/S/E/W).
   `Gear_Idler_16T_N/S/E/W` sit at (0, 90), (0, -90), (90, 0), (-90, 0), z 8, each rotated
-  -11.25 deg to mesh; 16.2 bearing hole (bore radius 8.1), solid web (7.1 mm rim to the
+  -11.25 deg to mesh; 15.9 bearing hole (bore radius 7.95), solid web (7.1 mm rim to the
   root leaves no room for crossings).
 - `Gear_Letter_64T_N` / `_W` mesh off the N / W idlers (top layer) at (0, 180, 8) and
-  (-180, 0, 8): each concentric with the 96T below it (90 + 90 = 180). 22.3 bearing hole,
+  (-180, 0, 8): each concentric with the 96T below it (90 + 90 = 180). 21.9 bearing hole,
   lighter `scurve` x4 crossings so the 96T below shows through.
 - `Gear_Letter_64T_N2` / `_W2` mesh the far side of each 96T (bottom layer) at (0, 360, -8)
   and (-360, 0, -8), `ringed` x5 crossings (2 steps). Fixed middle -> 96T -> 64T is 64:64 through two
@@ -53,7 +53,7 @@ Ratio check: (64/96) * (96/16) = 4 relative turns per board turn.
 - Crossings depth rule (soft): a gear that sits on top of another gets LESS material --
   fewer/thinner spokes, 1 step -- so the gear below shows through its windows. Back-layer
   gears can carry more (2 steps, `holes`, `ringed`) but still keep the windows big.
-  Current settings (all `BEARING_HOLE_D=22.3`):
+  Current settings (all `BEARING_HOLE_D=21.9`):
   - front letters N/W: `scurve` x4, `SPOKE_W=6`, `LAYERS=1, BASE_T=3.5, STEP_T=2, STEP_INSET=1.25`
     (~80% of the bore open, was 68% with scurve x6)
   - 96T N/W: `scurve` x6, `SPOKE_W=8.5`, `LAYERS=2, BASE_T=3, STEP_T=1.75, STEP_INSET=1.25` (~77%)
@@ -104,12 +104,20 @@ Ratio check: (64/96) * (96/16) = 4 relative turns per board turn.
 
 ## Bearings
 
-Printed hole diameters that snugly fit the bearings on hand (tested on the P1S):
+Modeled hole diameters for a tight press fit of the bearings on hand. Holes print true to
+size on the current printer: 16.2 / 22.3 (snug on the old Ender) let the bearings fall through.
+The values below are a first guess at a firm press; confirm with the fit coupons.
 
-| Bearing OD | Printed hole dia | Suggested use | Notes |
+| Bearing OD | Modeled hole dia | Suggested use | Notes |
 | --- | --- | --- | --- |
-| 16 mm | 16.2 mm | 16T idlers | 22.3 hole would leave only ~4.0 mm to a 16T root; 16.2 leaves ~7.1 mm |
-| 22 mm | 22.3 mm | 64T letter gears, 96T gears | needs hub radius >= ~16 mm (5 mm wall) |
+| 16 mm | 15.9 mm | 16T idlers | a 22 mm-class hole would leave only ~4 mm to a 16T root; 15.9 leaves ~7.2 mm |
+| 22 mm | 21.9 mm | 64T letter gears, 96T gears | needs hub radius >= ~16 mm (5 mm wall) |
+
+Fit coupons (`sator_gears.fit_coupon`, collection `Test Prints`, exported as
+`cad/export/Fit_Coupon_16.stl` and `Fit_Coupon_22.stl`): 5 mm bars with holes from 0.2 under
+to 0.2 over the guess in 0.1 steps, each size engraved beside its hole. The holes are cut
+like the gears' (fine polygon, straight wall, no chamfer), so the winning size carries over:
+set `BEARING_HOLE_D` / the idler bore radius to it, rebuild and re-export.
 
 Bearing model numbers and widths: TBD (width matters vs 8 mm gear thickness).
 
