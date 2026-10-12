@@ -26,7 +26,7 @@ Ratio check: (64/96) * (96/16) = 4 relative turns per board turn.
 | Pressure angle | 25 deg | thicker roots on 16T (20 deg undercuts below 17T); ~28% more radial load than 20 |
 | Helix angle | 0 (spur) | drop-in assembly, no axial thrust, no handedness to manage |
 | Rim under teeth | >= 8 mm | stiff enough that a large thin wheel does not flex out of mesh; 96T uses bore radius 97 (root radius 105.2) |
-| Crossings | `cad/crossings.py` | vary the style between neighbouring gears; layered (raised steps on a thin base web, see below). 96T: `scurve` x6, 2 steps; near (front) 64T letters: `scurve` x4, 1 step; far 64T letters: `ringed` x5, 2 steps; all with 22.3 bearing hole; middle 64T: `gothic` x8, rounded-triangle spandrels, solid hub (no hole), flat back (ALIGN back), taper 17 mm at rim -> 8.5 mm at hub. All: 1.2 mm rounded edges, overlap rim 1 mm (export gear + crossings as one STL) |
+| Crossings | `cad/crossings.py` | vary the style between neighbouring gears; layered (raised steps on a thin base web, see below). 96T: `scurve` x6, 2 steps; near (front) 64T letters: `scurve` x4, 1 step; far 64T letters: `ringed` x5, 2 steps; all with 22.3 bearing hole; middle 64T: `gothic` x8, rounded-triangle spandrels, 2 steps on an 8 mm base web, solid hub drum full height (no hole). All: 1.2 mm rounded edges, overlap rim 1 mm (export gear + crossings as one STL) |
 | Backlash / fit | TBD | gear3d `sator.fit` default is 0.25 mm; settle with a printed fit coupon |
 
 ## Blender scene (`cad/sator_hand_build.blend`)
@@ -57,8 +57,18 @@ Ratio check: (64/96) * (96/16) = 4 relative turns per board turn.
   - front letters N/W: `scurve` x4, `SPOKE_W=6`, `LAYERS=1, BASE_T=3.5, STEP_T=2, STEP_INSET=1.25`
     (~80% of the bore open, was 68% with scurve x6)
   - 96T N/W: `scurve` x6, `SPOKE_W=8.5`, `LAYERS=2, BASE_T=3, STEP_T=1.75, STEP_INSET=1.25` (~77%)
-  - far letters N2/W2: `ringed` x5, `SPOKE_W=7`, same 2-step settings (~57%)
+  - far letters N2/W2: `ringed` x5, `SPOKE_W=7`, 2 steps with `STEP_INSET=1.0` (~57%; 1.25 leaves
+    the thin outer spokes with no flat top)
+  - middle: `gothic` x8, `SPOKE_W=8`, `BEARING_HOLE_D=0`, `LAYERS=2, BASE_T=8, STEP_T=3, STEP_INSET=1.25`
+  - Each step narrows a wall by 2 x (STEP_INSET + rounding) in total; `crossings.py` refuses a
+    build whose top walls would be under 0.8 mm.
   Layered crossings keep every step on the top face, so they print support-free.
+- Reference rods (collection `Reference Rods`, red, unselectable, not exported): 8.1 mm rods
+  at all 25 letter centers, named `Rod_R<row>C<col>_<letter>`. The letter grid pitch is
+  180 mm: it is both the 64T-96T center distance (72 + 108) and middle -> 16T idler -> letter
+  (90 + 90), so every gear center lands on it (cell (row, col) at x = (col - 3) * 180,
+  y = (3 - row) * 180). Two 96T on the same layer cannot sit in orthogonally neighbouring
+  cells (180 < 220.5 OD); diagonal neighbours (254.6 mm) clear.
 - Modeled backlash is 0 (teeth touch exactly); printed parts need the fit value from the coupon.
 
 ## Printing: slice ONLY `cad/export/*.stl`
@@ -118,7 +128,7 @@ Bearing model numbers and widths: TBD (width matters vs 8 mm gear thickness).
 
 ## Open questions
 
-- How the fixed middle gear mounts to the frame (no bearing; hub is 8.5 mm thick, solid).
+- How the fixed middle gear mounts to the frame (no bearing; solid hub drum, r 15, full 24 mm height).
 - Idler axle support: lives in the spacer layer (z -4..4), outside the middle spacer
   (radius 68.9); the 96T below sweeps under the idler, so nothing can pass through z < -4 there.
 - What does each 16T Geneva driver mesh with -- the 96T directly? What does "-45 deg"

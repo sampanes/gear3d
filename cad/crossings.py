@@ -285,7 +285,7 @@ def _rotate(poly, a):
 def _gothic_openings(count, r_in, r_out, bore_r):
     base = _lancet(count, r_in, r_out)
     holes = [_rotate(_smooth(base, min(FILLET, 0.6)), TAU * k / count) for k in range(count)]
-    wall = max(2.5, SPOKE_W * 0.5)
+    wall = max(2.5, SPOKE_W * 0.5) + 2 * STEP_INSET * max(LAYERS, 0)  # steps eat into both sides
     if SPANDREL == "triangle":
         return holes + _spandrel_triangles(holes, count, r_in, bore_r, wall)
     if SPANDREL != "circle":
@@ -608,6 +608,21 @@ def _round_over(z_top, d0, b, segments):
             for a in (k * (math.pi / 2) / segments for k in range(segments + 1))]
 
 
+def _check_walls(loops, min_wall=0.8):
+    """Raise if two openings come closer than min_wall (top step walls eaten away)."""
+    from mathutils import kdtree
+    pts = [(x, y, i) for i, loop in enumerate(loops) for (x, y) in loop]
+    kd = kdtree.KDTree(len(pts))
+    for k, (x, y, _) in enumerate(pts):
+        kd.insert((x, y, 0.0), k)
+    kd.balance()
+    for x, y, i in pts:
+        for _, k, dist in kd.find_range((x, y, 0.0), min_wall):
+            if pts[k][2] != i:
+                raise ValueError(f"layered walls thinner than {min_wall} mm near ({x:.1f}, {y:.1f}): "
+                                 "raise SPOKE_W or lower STEP_INSET / LAYERS")
+
+
 def _layered(holes, height, bore_r, hub_r, segments):
     """Terraced crossings: thin base web, narrower raised steps, a stepped bearing boss.
 
@@ -659,6 +674,7 @@ def _layered(holes, height, bore_r, hub_r, segments):
     def ring(loop, d, sg, rmax, rmin):
         return _grow_hole(loop, sg * d, rmax, rmin)
 
+    _check_walls([ring(h, lv[-1][1], 1, r_max, r_min) for h in holes])
     caps = {-h2: [ring(outer, 0, 1, None, None)] + [ring(h, lv[0][1], 1, r_max, r_min) for h in holes],
             z_body: [ring(outer, 0, 1, None, None), ring(boss, 0, -1, None, None)]
                     + [ring(h, lv[-1][1], 1, r_max, r_min) for h in holes],
