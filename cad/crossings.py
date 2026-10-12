@@ -1,0 +1,523 @@
+"""Decorative wheel crossings (clock-style spokes) for PrecisionGears gears.
+
+Fills a gear's bore with a hub plus decorative crossings, as a separate object
+parented to the gear. The crossings overlap the gear rim by RIM_OVERLAP so the
+two export/slice as one solid (select both, export as one STL).
+
+Use: open in Blender's Text Editor, select a PrecisionGears gear, edit the
+settings below, press Run Script. Re-running replaces the previous crossings.
+
+Styles:
+  spiral  -- curved spokes that sweep around, flared and filleted where they
+             meet the hub and rim
+  scurve  -- spokes leave the hub and meet the rim radially, curving between
+  blades  -- many thin crescent blades (steampunk turbine)
+  gothic  -- pointed lancet windows (rose-window tracery) with oculi between
+             the arch tops
+"""
+
+import math
+
+import bpy
+
+# ==== settings (mm) ====
+STYLE = "spiral"
+COUNT = 5            # spokes / blades / windows
+BEARING_HOLE_D = 22.3  # printed hole that snugly fits the bearing (22 mm OD -> 22.3, 16 mm OD -> 16.2; 0 = none)
+HUB_WALL = 5.0       # solid ring around the bearing hole
+HUB_MIN_R = 16.0     # smallest solid hub radius (also used when there is no hole)
+SPOKE_W = 7.0        # spoke width (gothic: wall between windows)
+SWEEP_DEG = 60.0     # how far a spoke swings around from hub to rim
+FLARE = 0.8          # extra width where spokes meet hub/rim, x SPOKE_W
+FILLET = 2.5         # corner rounding of the openings
+RIM_OVERLAP = 1.0    # how far the crossings reach into the gear rim
+RIM_LIP = 0.0        # solid band kept just inside the bore (gothic uses 4)
+BEVEL = 1.2          # rounding on the spoke/hub edges, top and bottom (0 = sharp)
+BEVEL_SEGMENTS = 3   # 1 = 45 deg chamfer (prints cleanest on the bed side), 2-4 = round
+SPANDREL = "triangle"  # gothic: cut-out between arch tops -- "triangle", "circle" or "none"
+THICK_RIM = 0.0      # crossings thickness where they meet the rim (0 = full gear height)
+THICK_HUB = 0.0      # thickness at the hub; differs from THICK_RIM -> smooth taper (0 = same as rim)
+ALIGN = "back"       # where thinner crossings sit: "back" (flat on the bed, prints support-free),
+                     # "center" (sunken both faces, needs supports), or "front"
+# ========================
+
+TAU = 2.0 * math.pi
+
+
+def _gear_props(ob):
+    for name in ("gear", "precision_gears"):
+        p = getattr(ob, name, None)
+        if p is not None and getattr(p, "is_gear", False):
+            return p
+    try:
+        from PrecisionGears import consts
+        p = getattr(ob, consts.GEAR_PROPS_ALIAS, None)
+        if p is not None and p.is_gear:
+            return p
+    except ImportError:
+        pass
+    return None
+
+
+# ---- 2D helpers -------------------------------------------------------------
+
+def _arc(r, a0, a1, step_deg=1.0):
+    n = max(2, int(abs(a1 - a0) / math.radians(step_deg)) + 1)
+    return [(r * math.cos(a0 + (a1 - a0) * i / (n - 1)),
+             r * math.sin(a0 + (a1 - a0) * i / (n - 1))) for i in range(n)]
+
+
+def _circle(cx, cy, r, step_deg=4.0):
+    n = max(12, int(360 / step_deg))
+    return [(cx + r * math.cos(TAU * i / n), cy + r * math.sin(TAU * i / n)) for i in range(n)]
+
+
+def _resample(poly, spacing):
+    out = []
+    for i in range(len(poly)):
+        x0, y0 = poly[i]
+        x1, y1 = poly[(i + 1) % len(poly)]
+        seg = math.hypot(x1 - x0, y1 - y0)
+        n = max(1, int(seg / spacing))
+        for j in range(n):
+            t = j / n
+            out.append((x0 + (x1 - x0) * t, y0 + (y1 - y0) * t))
+    return out
+
+
+def _smooth(poly, radius):
+    """Round corners: gaussian-smooth a closed outline over ~radius of arc length."""
+    if radius <= 0:
+        return poly
+    spacing = 0.25
+    pts = _resample(poly, spacing)
+    sigma = radius / spacing
+    half = int(3 * sigma)
+    w = [math.exp(-0.5 * (k / sigma) ** 2) for k in range(-half, half + 1)]
+    ws = sum(w)
+    n = len(pts)
+    out = []
+    for i in range(n):
+        sx = sy = 0.0
+        for k, wk in zip(range(-half, half + 1), w):
+            x, y = pts[(i + k) % n]
+            sx += wk * x
+            sy += wk * y
+        out.append((sx / ws, sy / ws))
+    return out[::2]
+
+
+def _clip_radial(edge, r_in, r_out):
+    """Cut a polyline (running outward) to the part between r_in and r_out."""
+    def cross(a, b, r):
+        ra, rb = math.hypot(*a), math.hypot(*b)
+        t = (r - ra) / (rb - ra)
+        return (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t)
+
+    out = []
+    for a, b in zip(edge, edge[1:]):
+        ra, rb = math.hypot(*a), math.hypot(*b)
+        if ra < r_in <= rb:
+            out.append(cross(a, b, r_in))
+        if r_in <= rb <= r_out:
+            out.append(b)
+        if ra <= r_out < rb:
+            out.append(cross(a, b, r_out))
+            break
+    return out
+
+
+# ---- spoke-style openings (spiral / scurve / blades) ---------------------------
+
+def _spoke_openings(style, count, r_in, r_out):
+    sweep = math.radians(SWEEP_DEG)
+
+    def g(t):  # angular progress along the spoke
+        if style == "scurve":
+            c = min(max(t, 0.0), 1.0)
+            return c * c * (3 - 2 * c)
+        return t
+
+    def width(t):
+        c = min(max(t, 0.0), 1.0)
+        if style == "blades":
+            return SPOKE_W * (0.35 + 0.65 * math.sin(math.pi * c))
+        return SPOKE_W * (1 + FLARE * (math.exp(-c / 0.08) + math.exp(-(1 - c) / 0.08)))
+
+    def edges(k):
+        phi = TAU * k / count
+        ts = [-0.2 + 1.4 * i / 600 for i in range(601)]
+        pts = []
+        for t in ts:
+            r = r_in + (r_out - r_in) * t
+            th = phi + sweep * g(t)
+            pts.append((r * math.cos(th), r * math.sin(th)))
+        plus, minus = [], []
+        for i, t in enumerate(ts):
+            a = pts[max(i - 1, 0)]
+            b = pts[min(i + 1, len(pts) - 1)]
+            tx, ty = b[0] - a[0], b[1] - a[1]
+            ln = math.hypot(tx, ty)
+            nx, ny = -ty / ln, tx / ln
+            h = width(t) / 2
+            x, y = pts[i]
+            plus.append((x + nx * h, y + ny * h))
+            minus.append((x - nx * h, y - ny * h))
+        return _clip_radial(plus, r_in, r_out), _clip_radial(minus, r_in, r_out)
+
+    all_edges = [edges(k) for k in range(count)]
+    holes = []
+    for k in range(count):
+        a = all_edges[k][0]                  # leading edge of spoke k
+        b = all_edges[(k + 1) % count][1]    # trailing edge of spoke k+1
+        ang = lambda p: math.atan2(p[1], p[0])
+        a_out, b_out = ang(a[-1]), ang(b[-1])
+        while b_out <= a_out:
+            b_out += TAU
+        a_in, b_in = ang(a[0]), ang(b[0])
+        while b_in <= a_in:
+            b_in += TAU
+        poly = a + _arc(r_out, a_out, b_out)[1:-1] + b[::-1] + _arc(r_in, b_in, a_in)[1:-1]
+        holes.append(_smooth(poly, FILLET))
+    return holes
+
+
+# ---- gothic lancet openings ---------------------------------------------------
+
+def _lancet(count, r_in, r_out):
+    """One pointed-arch window on the +x axis, between spokes at +/- pi/count."""
+    beta = math.pi / count
+    s = SPOKE_W / 2
+    d = (math.cos(beta), math.sin(beta))
+    nb = (math.sin(beta), -math.cos(beta))
+
+    def side(u):  # upper side line (offset s inside the sector boundary)
+        return (u * d[0] + s * nb[0], u * d[1] + s * nb[1])
+
+    def apex_of(u):
+        sx, sy = side(u)
+        rr = 2 * sy  # equilateral arch: radius = window width at springing
+        cx, cy = sx + rr * nb[0], sy + rr * nb[1]
+        disc = rr * rr - cy * cy
+        if disc <= 0:
+            return None
+        return (sx, sy), (cx, cy), rr, cx + math.sqrt(disc)
+
+    # springing point so the apex lands at r_out
+    lo, hi = r_in, r_out
+    for _ in range(60):
+        mid = (lo + hi) / 2
+        res = apex_of(mid)
+        if res is None or res[3] > r_out:
+            hi = mid
+        else:
+            lo = mid
+    (sx, sy), (cx, cy), rr, ax = apex_of(lo)
+
+    # sill: where the side line crosses r_in
+    lo2, hi2 = 0.0, lo
+    for _ in range(60):
+        mid = (lo2 + hi2) / 2
+        if math.hypot(*side(mid)) < r_in:
+            lo2 = mid
+        else:
+            hi2 = mid
+    sill_up = side(hi2)
+    a_sill = math.atan2(sill_up[1], sill_up[0])
+
+    a0 = math.atan2(sy - cy, sx - cx)
+    a1 = math.atan2(0 - cy, ax - cx)
+    n = 60
+    arch_up = [(cx + rr * math.cos(a0 + (a1 - a0) * i / n),
+                cy + rr * math.sin(a0 + (a1 - a0) * i / n)) for i in range(n + 1)]
+    upper = [sill_up, (sx, sy)] + arch_up[1:]
+    lower = [(x, -y) for (x, y) in upper[::-1]][1:]
+    sill = _arc(r_in, -a_sill, a_sill)[1:-1]
+    return sill + upper + lower
+
+
+def _rotate(poly, a):
+    c, s = math.cos(a), math.sin(a)
+    return [(x * c - y * s, x * s + y * c) for (x, y) in poly]
+
+
+def _gothic_openings(count, r_in, r_out, bore_r):
+    base = _lancet(count, r_in, r_out)
+    holes = [_rotate(_smooth(base, min(FILLET, 0.6)), TAU * k / count) for k in range(count)]
+    wall = max(2.5, SPOKE_W * 0.5)
+    if SPANDREL == "triangle":
+        return holes + _spandrel_triangles(holes, count, r_in, bore_r, wall)
+    if SPANDREL != "circle":
+        return holes
+    # oculus in each spandrel between arch tops, on the spoke axis
+    best = None
+    for i in range(200):
+        rc = r_in + (bore_r - r_in) * i / 199
+        p = (rc * math.cos(math.pi / count), rc * math.sin(math.pi / count))
+        dist = min(math.hypot(p[0] - x, p[1] - y) for h in holes[:2] for (x, y) in h)
+        rho = min(dist, bore_r - rc) - wall
+        if best is None or rho > best[0]:
+            best = (rho, rc)
+    if best and best[0] >= 2.0:
+        rho, rc = best
+        for k in range(count):
+            a = TAU * k / count + math.pi / count
+            holes.append(_circle(rc * math.cos(a), rc * math.sin(a), rho))
+    return holes
+
+
+def _rounded_triangle(size, rho):
+    """Equilateral triangle (circumradius `size`) pointing toward -x, corners rounded by rho."""
+    h = math.sqrt(3) / 2
+    tri = [(-size, 0.0), (size / 2, -size * h), (size / 2, size * h)]  # counter-clockwise
+    out = []
+    for i in range(3):
+        (px, py), (vx, vy), (nx, ny) = tri[i - 1], tri[i], tri[(i + 1) % 3]
+        a0 = math.atan2(-(vx - px), vy - py)  # outward normal of incoming edge
+        a1 = math.atan2(-(nx - vx), ny - vy)  # outward normal of outgoing edge
+        while a1 < a0:
+            a1 += TAU
+        for k in range(13):
+            a = a0 + (a1 - a0) * k / 12
+            out.append((vx + rho * math.cos(a), vy + rho * math.sin(a)))
+    return out
+
+
+def _spandrel_triangles(holes, count, r_in, r_lim, wall):
+    """Largest rounded triangle that fits between neighbouring arch tops, one per spandrel."""
+    import numpy as np
+    axis = math.pi / count  # spandrel axis between window 0 and window 1
+    near = np.array([pt for h in holes[:2] for pt in h
+                     if math.hypot(*pt) > r_in + 0.3 * (r_lim - r_in)])
+
+    def fits(rc, size):
+        shape = _resample(_rounded_triangle(size, 0.35 * size), 0.75)
+        pts = np.array(_rotate([(x + rc, y) for (x, y) in shape], axis))
+        if np.hypot(pts[:, 0], pts[:, 1]).max() > r_lim:
+            return False
+        d = np.sqrt(((pts[:, None, :] - near[None, :, :]) ** 2).sum(-1)).min()
+        return d >= wall
+
+    best = (0.0, None)
+    for i in range(40):
+        rc = r_in + (r_lim - r_in) * (0.35 + 0.65 * i / 39)
+        lo, hi = 0.0, (r_lim - r_in) / 2
+        if not fits(rc, 0.3):
+            continue
+        for _ in range(16):
+            mid = (lo + hi) / 2
+            if fits(rc, mid):
+                lo = mid
+            else:
+                hi = mid
+        if lo > best[0]:
+            best = (lo, rc)
+    size, rc = best
+    if rc is None or size * 1.35 < 2.0:
+        return []
+    shape = [(x + rc, y) for (x, y) in _rounded_triangle(size, 0.35 * size)]
+    return [_rotate(shape, axis + TAU * k / count) for k in range(count)]
+
+
+# ---- build ----------------------------------------------------------------------
+
+def _grow_hole(loop, d, r_max=None):
+    """Offset an opening outline away from its interior by d (enlarges the opening).
+
+    Points are kept inside r_max so openings never cross the outer boundary.
+    """
+    if d == 0:
+        return loop
+    area = sum(x0 * y1 - x1 * y0 for (x0, y0), (x1, y1) in zip(loop, loop[1:] + loop[:1]))
+    sgn = 1.0 if area > 0 else -1.0
+    n = len(loop)
+    out = []
+    for i in range(n):
+        (ax, ay), (bx, by), (cx, cy) = loop[i - 1], loop[i], loop[(i + 1) % n]
+        tx, ty = cx - ax, cy - ay
+        ln = math.hypot(tx, ty)
+        x, y = bx + sgn * ty / ln * d, by - sgn * tx / ln * d
+        r = math.hypot(x, y)
+        if r_max is not None and r > r_max:
+            x, y = x * r_max / r, y * r_max / r
+        out.append((x, y))
+    return out
+
+
+def _flat_fill(loops):
+    """Triangulate 2D outlines (even-odd: nested loops become holes); returns (verts, faces)."""
+    cu = bpy.data.curves.new("_crossings_fill", "CURVE")
+    cu.dimensions = "2D"
+    cu.fill_mode = "BOTH"
+    for loop in loops:
+        sp = cu.splines.new("POLY")
+        sp.points.add(len(loop) - 1)
+        for p, (x, y) in zip(sp.points, loop):
+            p.co = (x, y, 0.0, 1.0)
+        sp.use_cyclic_u = True
+    tmp = bpy.data.objects.new("_crossings_fill", cu)
+    bpy.context.collection.objects.link(tmp)
+    me = bpy.data.meshes.new_from_object(tmp.evaluated_get(bpy.context.evaluated_depsgraph_get()))
+    verts = [(v.co.x, v.co.y) for v in me.vertices]
+    faces = [tuple(f.vertices) for f in me.polygons]
+    bpy.data.objects.remove(tmp)
+    bpy.data.curves.remove(cu)
+    bpy.data.meshes.remove(me)
+    return verts, faces
+
+
+def _solid(plain_loops, bevel_loops, height, bevel, segments, r_max, surface=None):
+    """Extrude outlines to a watertight solid; bevel_loops get rounded top/bottom edges.
+
+    surface(r) -> (z_bottom, z_top) reshapes the faces (sunken / tapered crossings);
+    edge rounding keeps its size because vertices keep their distance from the face.
+    """
+    import bmesh
+    h2 = height / 2
+    if bevel > 0:
+        top = [(h2 - bevel + bevel * math.sin(a), bevel * (1 - math.cos(a)))
+               for a in (k * (math.pi / 2) / segments for k in range(segments + 1))]
+        levels = [(-z, d) for (z, d) in reversed(top)] + top
+    else:
+        levels = [(-h2, 0.0), (h2, 0.0)]
+    flat = [(-h2, 0.0), (h2, 0.0)]
+
+    bm = bmesh.new()
+    cap_loops = []
+    for loop, lv in [(l, flat) for l in plain_loops] + [(l, levels) for l in bevel_loops]:
+        rings = []
+        for z, d in lv:
+            pts = _grow_hole(loop, d, r_max)
+            rings.append([bm.verts.new((x, y, z)) for (x, y) in pts])
+        cap_loops.append(_grow_hole(loop, lv[-1][1], r_max))
+        n = len(loop)
+        for ra, rb in zip(rings, rings[1:]):
+            for i in range(n):
+                j = (i + 1) % n
+                bm.faces.new((ra[i], ra[j], rb[j], rb[i]))
+    verts, faces = _flat_fill(cap_loops)
+    for z in (-h2, h2):
+        vs = [bm.verts.new((x, y, z)) for (x, y) in verts]
+        for f in faces:
+            bm.faces.new([vs[i] for i in f])
+    bmesh.ops.remove_doubles(bm, verts=bm.verts[:], dist=1e-4)
+    if surface is not None:
+        _refine_caps(bm, 3.0)
+        for v in bm.verts:
+            bot, top = surface(math.hypot(v.co.x, v.co.y))
+            v.co.z = top - (h2 - v.co.z) if v.co.z > 0 else bot + (v.co.z + h2)
+        bmesh.ops.triangulate(bm, faces=[f for f in bm.faces if len(f.verts) > 3])
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
+    me = bpy.data.meshes.new("_crossings")
+    bm.to_mesh(me)
+    bm.free()
+    me.shade_smooth()
+    try:
+        me.set_sharp_from_angle(angle=math.radians(35))
+    except (AttributeError, TypeError):
+        pass
+    return me
+
+
+def _refine_caps(bm, max_len):
+    """Split long edges inside the flat faces so a curved (tapered) face can follow the profile."""
+    import bmesh
+    for _ in range(10):
+        bm.normal_update()
+        long_edges = [e for e in bm.edges
+                      if len(e.link_faces) == 2
+                      and all(abs(f.normal.z) > 0.99 for f in e.link_faces)
+                      and e.calc_length() > max_len]
+        if not long_edges:
+            return
+        bmesh.ops.subdivide_edges(bm, edges=long_edges, cuts=1, use_grid_fill=True)
+        bmesh.ops.triangulate(bm, faces=[f for f in bm.faces if len(f.verts) > 3])
+
+
+SETTINGS = ("BEARING_HOLE_D", "HUB_WALL", "HUB_MIN_R", "SPOKE_W", "SWEEP_DEG", "FLARE", "FILLET",
+            "RIM_OVERLAP", "RIM_LIP", "BEVEL", "BEVEL_SEGMENTS", "SPANDREL",
+            "THICK_RIM", "THICK_HUB", "ALIGN")
+
+
+def build(gear, style=None, count=None, **settings):
+    """Build crossings for `gear`; keyword settings (e.g. BEARING_HOLE_D=0) override the header."""
+    import json
+    g = globals()
+    unknown = set(settings) - set(SETTINGS)
+    if unknown:
+        raise ValueError(f"unknown settings: {sorted(unknown)}")
+    saved = {k: g[k] for k in settings}
+    g.update(settings)
+    try:
+        ob = _build(gear, style or STYLE, count or COUNT)
+        ob["crossings_settings"] = json.dumps({k: g[k] for k in SETTINGS})
+        return ob
+    finally:
+        g.update(saved)
+
+
+def _build(gear, style, count):
+    props = _gear_props(gear)
+    if props is None:
+        raise RuntimeError(f"{gear.name} is not a PrecisionGears gear")
+    if not props.bore_enabled:
+        raise RuntimeError("enable the gear's bore first -- the crossings fill the bore")
+    bore_r = props.bore_size  # PrecisionGears labels this field "Radius"
+
+    zs = [v[2] for v in gear.bound_box]
+    z0, z1 = min(zs), max(zs)
+
+    lip = 4.0 if style == "gothic" and RIM_LIP == 0 else RIM_LIP
+    hub_r = max(BEARING_HOLE_D / 2 + HUB_WALL, HUB_MIN_R)
+    r_in, r_out = hub_r, bore_r - lip
+    if style == "gothic":
+        holes = _gothic_openings(count, r_in, r_out, bore_r - lip)
+    else:
+        holes = _spoke_openings(style, count, r_in, r_out)
+
+    # outer edge hides inside the gear rim and the bearing wall must stay straight,
+    # so only the decorative openings get rounded edges
+    plain = [_circle(0, 0, bore_r + RIM_OVERLAP, 1.0)]
+    if BEARING_HOLE_D > 0:
+        plain.append(_circle(0, 0, BEARING_HOLE_D / 2, 1.0))
+    height = z1 - z0
+    t_rim = min(THICK_RIM or height, height)
+    t_hub = min(THICK_HUB or t_rim, height)
+    bevel = max(0.0, min(BEVEL, min(t_rim, t_hub) / 2 - 0.2))
+    surface = None
+    if t_rim < height or t_hub < height:
+        def surface(r, h2=height / 2):
+            c = min(max((r - hub_r) / max(bore_r - hub_r, 1e-6), 0.0), 1.0)
+            t = t_hub + (t_rim - t_hub) * c * c * (3 - 2 * c)
+            if ALIGN == "center":
+                return -t / 2, t / 2
+            if ALIGN == "front":
+                return h2 - t, h2
+            return -h2, -h2 + t
+    me = _solid(plain, holes, height, bevel, max(1, BEVEL_SEGMENTS), bore_r + RIM_OVERLAP / 2, surface)
+
+    name = f"{gear.name} Crossings"
+    old = bpy.data.objects.get(name)
+    if old is not None:
+        old_data = old.data
+        bpy.data.objects.remove(old)
+        if old_data.users == 0:
+            bpy.data.meshes.remove(old_data)
+
+    me.name = name
+    ob = bpy.data.objects.new(name, me)
+    for col in gear.users_collection:
+        col.objects.link(ob)
+    ob.parent = gear
+    ob.location = (0, 0, (z0 + z1) / 2)
+    ob["crossings_style"] = style
+    ob["crossings_count"] = count
+    return ob
+
+
+if __name__ == "__main__":
+    target = bpy.context.active_object
+    if target is not None and _gear_props(target) is None and target.parent is not None:
+        target = target.parent  # crossings selected: rebuild for its gear
+    result = build(target)
+    print(f"[OK] built {result.name} ({STYLE}, {COUNT})")

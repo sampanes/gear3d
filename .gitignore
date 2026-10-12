@@ -5,3 +5,8 @@ CLAUDE.local.md
 .DS_Store
 .vite/
 tools/shots/
+
+# Blender backup/temp saves (the .blend itself is tracked; see cad/check_private.py)
+*.blend1
+*.blend@
+__pycache__/

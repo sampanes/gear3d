@@ -1,0 +1,4 @@
+# CAD binaries: never diff or line-convert
+*.blend binary
+*.stl binary
+*.3mf binary
