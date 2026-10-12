@@ -119,11 +119,12 @@ def add_groove(ob, z_center, width, depth_below_root=0.3):
     return cutter
 
 
-def add_rim_dots(ob, count=None, dia=2.4, depth=1.2, segments=16):
+def add_rim_dots(ob, count=None, dia=2.4, depth=1.2, segments=16, r=None):
     """Ring of round dimples in the rim's top face, midway between bore and tooth roots.
 
     Decorative only (blind holes, the rim keeps its strength). One dot per tooth by
     default, lined up with the teeth. Boolean modifier, stays live; count=0 removes it.
+    r overrides the ring radius (e.g. to re-center it when other cuts narrow the rim).
     """
     p = props(ob)
     name = f"{ob.name} Rim Dots"
@@ -138,7 +139,7 @@ def add_rim_dots(ob, count=None, dia=2.4, depth=1.2, segments=16):
             ob.modifiers.remove(mod)
         return None
     count = count or p.teeth
-    r = (p.bore_size + root_radius(p)) / 2
+    r = r or (p.bore_size + root_radius(p)) / 2
     z_top = max(v[2] for v in ob.bound_box)
     phase = tooth_phase(ob) - ob.rotation_euler.z
     me = bpy.data.meshes.new(name)

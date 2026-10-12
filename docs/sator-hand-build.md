@@ -67,7 +67,11 @@ Ratio check: (64/96) * (96/16) = 4 relative turns per board turn.
   `RIM_TEETH_H=2.5`, lined up with the outer teeth, flush with the step top) where a window
   meets the rim, kept clear of the spokes; plus `sator_gears.add_rim_dots(gear)` -- a ring of
   2.4 mm x 1.2 mm deep dimples in the rim top face, one per tooth (live Boolean). The middle
-  gear gets dots only: its gothic web is solid at the rim, so there is no window edge for teeth.
+  gear's gothic web is solid at the rim, so instead of inner teeth it carries rim notches: a
+  hidden 64T cutter (`Gear_Middle_64T Rim Cutter`, module 1.75, scaled 1.085 in x/y, teeth
+  lined up with the outer teeth) sinks a ring-gear pocket 4.6 mm into the top face (modifier
+  `Rim Notches`). Its dots are re-centered between the notch tips (r 63.6) and the tooth roots
+  (`add_rim_dots(gear, r=66.4)`), leaving ~1.6 mm wall each side.
 - The middle gear mesh is regenerated from its PrecisionGears settings (sharp inner rim edge;
   a hand-made rounding there was removed).
 - Reference rods (collection `Reference Rods`, red, unselectable, not exported): 8.1 mm rods
