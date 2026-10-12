@@ -26,7 +26,7 @@ Ratio check: (64/96) * (96/16) = 4 relative turns per board turn.
 | Pressure angle | 25 deg | thicker roots on 16T (20 deg undercuts below 17T); ~28% more radial load than 20 |
 | Helix angle | 0 (spur) | drop-in assembly, no axial thrust, no handedness to manage |
 | Rim under teeth | >= 8 mm | stiff enough that a large thin wheel does not flex out of mesh; 96T uses bore radius 97 (root radius 105.2) |
-| Crossings | `cad/crossings.py` | vary the style between neighbouring gears. 96T and the near 64T letters: `scurve` x6 with 22.3 bearing hole; far 64T letters: `ringed` x5; middle 64T: `gothic` x8, rounded-triangle spandrels, solid hub (no hole), flat back (ALIGN back), taper 17 mm at rim -> 8.5 mm at hub. All: 1.2 mm rounded edges, overlap rim 1 mm (export gear + crossings as one STL) |
+| Crossings | `cad/crossings.py` | vary the style between neighbouring gears; layered (raised steps on a thin base web, see below). 96T: `scurve` x6, 2 steps; near (front) 64T letters: `scurve` x4, 1 step; far 64T letters: `ringed` x5, 2 steps; all with 22.3 bearing hole; middle 64T: `gothic` x8, rounded-triangle spandrels, solid hub (no hole), flat back (ALIGN back), taper 17 mm at rim -> 8.5 mm at hub. All: 1.2 mm rounded edges, overlap rim 1 mm (export gear + crossings as one STL) |
 | Backlash / fit | TBD | gear3d `sator.fit` default is 0.25 mm; settle with a printed fit coupon |
 
 ## Blender scene (`cad/sator_hand_build.blend`)
@@ -43,13 +43,22 @@ Ratio check: (64/96) * (96/16) = 4 relative turns per board turn.
   root leaves no room for crossings).
 - `Gear_Letter_64T_N` / `_W` mesh off the N / W idlers (top layer) at (0, 180, 8) and
   (-180, 0, 8): each concentric with the 96T below it (90 + 90 = 180). 22.3 bearing hole,
-  same `scurve` x6 crossings as the 96T so each stacked pair matches.
+  lighter `scurve` x4 crossings so the 96T below shows through.
 - `Gear_Letter_64T_N2` / `_W2` mesh the far side of each 96T (bottom layer) at (0, 360, -8)
-  and (-360, 0, -8), `ringed` x5 crossings. Fixed middle -> 96T -> 64T is 64:64 through two
+  and (-360, 0, -8), `ringed` x5 crossings (2 steps). Fixed middle -> 96T -> 64T is 64:64 through two
   meshes, so these letters stay upright like the idler-driven ones.
 - Viewport: scene units are mm, so views clip at `clip_end`; set to 20000 (20 m) with
   `clip_start` 0.5 in every workspace. The Shading workspace uses Material Preview (slow);
   work in Layout (Solid).
+- Crossings depth rule (soft): a gear that sits on top of another gets LESS material --
+  fewer/thinner spokes, 1 step -- so the gear below shows through its windows. Back-layer
+  gears can carry more (2 steps, `holes`, `ringed`) but still keep the windows big.
+  Current settings (all `BEARING_HOLE_D=22.3`):
+  - front letters N/W: `scurve` x4, `SPOKE_W=6`, `LAYERS=1, BASE_T=3.5, STEP_T=2, STEP_INSET=1.25`
+    (~80% of the bore open, was 68% with scurve x6)
+  - 96T N/W: `scurve` x6, `SPOKE_W=8.5`, `LAYERS=2, BASE_T=3, STEP_T=1.75, STEP_INSET=1.25` (~77%)
+  - far letters N2/W2: `ringed` x5, `SPOKE_W=7`, same 2-step settings (~57%)
+  Layered crossings keep every step on the top face, so they print support-free.
 - Modeled backlash is 0 (teeth touch exactly); printed parts need the fit value from the coupon.
 
 ## Printing: slice ONLY `cad/export/*.stl`
@@ -63,8 +72,8 @@ Ratio check: (64/96) * (96/16) = 4 relative turns per board turn.
 - Never slice a hand export of gear + crossings: those are two shells. The slicer treats each
   shell as a part and gives both perimeters, so the 1 mm overlap prints as a seam of walls
   instead of bonded infill (weak ring where the spokes meet the rim).
-- Identical gears share one STL: `Gear_96T.stl` (all 96T), `Gear_Letter_64T_N.stl` (scurve
-  letters), `Gear_Letter_64T_N2.stl` (ringed letters), `Gear_Idler_16T_N.stl` (all idlers).
+- Identical gears share one STL: `Gear_96T.stl` (all 96T), `Gear_Letter_64T_N.stl` (front
+  letters), `Gear_Letter_64T_N2.stl` (far letters), `Gear_Idler_16T_N.stl` (all idlers).
   Print as many as the scene has.
 - Re-export after changing a gear or its crossings; the STLs do not update themselves.
 

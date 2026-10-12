@@ -21,6 +21,10 @@ Styles:
              round-headed near the rim (curl set by SWEEP_DEG)
   straight -- classic machine-wheel spokes, tapered from hub to rim
   holes   -- pierced disc: a ring of big round holes, small ones nestled between
+
+Any style can be layered (LAYERS > 0): a thin base web flat on the bed, each raised
+step narrower than the one below, and a stepped boss around the bearing. Steps sit
+on the top face only, so layered crossings print without supports.
 """
 
 import math
@@ -46,6 +50,10 @@ THICK_RIM = 0.0      # crossings thickness where they meet the rim (0 = full gea
 THICK_HUB = 0.0      # thickness at the hub; differs from THICK_RIM -> smooth taper (0 = same as rim)
 ALIGN = "back"       # where thinner crossings sit: "back" (flat on the bed, prints support-free),
                      # "center" (sunken both faces, needs supports), or "front"
+LAYERS = 0           # layered look: raised steps on top of a thin base web (0 = off)
+BASE_T = 3.5         # layered: base web thickness (flat on the bed)
+STEP_T = 2.0         # layered: height of each raised step
+STEP_INSET = 1.5     # layered: each step is this much narrower (per side) than the one below
 # ========================
 
 TAU = 2.0 * math.pi
@@ -187,11 +195,32 @@ def _between(all_edges, r_in, r_out):
         while b_out <= a_out:
             b_out += TAU
         a_in, b_in = ang(a[0]), ang(b[0])
-        while b_in <= a_in:
-            b_in += TAU
-        poly = a + _arc(r_out, a_out, b_out)[1:-1] + b[::-1] + _arc(r_in, b_in, a_in)[1:-1]
+        if (b_in - a_in) % TAU > math.pi:
+            # wide (flared) spokes overlap at the hub: the opening starts where they cross
+            ia, jb, p = _first_crossing(a, b)
+            poly = [p] + a[ia + 1:] + _arc(r_out, a_out, b_out)[1:-1] + b[:jb:-1]
+        else:
+            while b_in <= a_in:
+                b_in += TAU
+            poly = a + _arc(r_out, a_out, b_out)[1:-1] + b[::-1] + _arc(r_in, b_in, a_in)[1:-1]
         holes.append(_smooth(poly, FILLET))
     return holes
+
+
+def _first_crossing(a, b):
+    """First intersection of two outward-running polylines: (segment in a, segment in b, point)."""
+    for i in range(len(a) - 1):
+        (x0, y0), (x1, y1) = a[i], a[i + 1]
+        for j in range(len(b) - 1):
+            (u0, v0), (u1, v1) = b[j], b[j + 1]
+            den = (x1 - x0) * (v1 - v0) - (y1 - y0) * (u1 - u0)
+            if den == 0:
+                continue
+            t = ((u0 - x0) * (v1 - v0) - (v0 - y0) * (u1 - u0)) / den
+            s = ((u0 - x0) * (y1 - y0) - (v0 - y0) * (x1 - x0)) / den
+            if 0 <= t <= 1 and 0 <= s <= 1:
+                return i, j, (x0 + (x1 - x0) * t, y0 + (y1 - y0) * t)
+    raise ValueError("spokes overlap at the hub but never part -- reduce SPOKE_W or FLARE")
 
 
 # ---- gothic lancet openings ---------------------------------------------------
@@ -456,10 +485,11 @@ def _flame_openings(count, r_in, r_out):
 
 # ---- build ----------------------------------------------------------------------
 
-def _grow_hole(loop, d, r_max=None):
+def _grow_hole(loop, d, r_max=None, r_min=None):
     """Offset an opening outline away from its interior by d (enlarges the opening).
 
-    Points are kept inside r_max so openings never cross the outer boundary.
+    Points are kept inside r_max (and outside r_min) so openings never cross the outer
+    boundary (or the hub boss).
     """
     if d == 0:
         return loop
@@ -475,6 +505,8 @@ def _grow_hole(loop, d, r_max=None):
         r = math.hypot(x, y)
         if r_max is not None and r > r_max:
             x, y = x * r_max / r, y * r_max / r
+        elif r_min is not None and r < r_min:
+            x, y = x * r_min / r, y * r_min / r
         out.append((x, y))
     return out
 
@@ -518,20 +550,21 @@ def _solid(plain_loops, bevel_loops, height, bevel, segments, r_max, surface=Non
     flat = [(-h2, 0.0), (h2, 0.0)]
 
     bm = bmesh.new()
-    cap_loops = []
+    cap_bot, cap_top = [], []
     for loop, lv in [(l, flat) for l in plain_loops] + [(l, levels) for l in bevel_loops]:
         rings = []
         for z, d in lv:
             pts = _grow_hole(loop, d, r_max)
             rings.append([bm.verts.new((x, y, z)) for (x, y) in pts])
-        cap_loops.append(_grow_hole(loop, lv[-1][1], r_max))
+        cap_bot.append(_grow_hole(loop, lv[0][1], r_max))
+        cap_top.append(_grow_hole(loop, lv[-1][1], r_max))
         n = len(loop)
         for ra, rb in zip(rings, rings[1:]):
             for i in range(n):
                 j = (i + 1) % n
                 bm.faces.new((ra[i], ra[j], rb[j], rb[i]))
-    verts, faces = _flat_fill(cap_loops)
-    for z in (-h2, h2):
+    for z, caps in ((-h2, cap_bot), (h2, cap_top)):
+        verts, faces = _flat_fill(caps)
         vs = [bm.verts.new((x, y, z)) for (x, y) in verts]
         for f in faces:
             bm.faces.new([vs[i] for i in f])
@@ -569,9 +602,101 @@ def _refine_caps(bm, max_len):
         bmesh.ops.triangulate(bm, faces=[f for f in bm.faces if len(f.verts) > 3])
 
 
+def _round_over(z_top, d0, b, segments):
+    """(z, d) points rounding a convex edge of radius b that ends at height z_top."""
+    return [(z_top - b + b * math.sin(a), d0 + b * (1 - math.cos(a)))
+            for a in (k * (math.pi / 2) / segments for k in range(segments + 1))]
+
+
+def _layered(holes, height, bore_r, hub_r, segments):
+    """Terraced crossings: thin base web, narrower raised steps, a stepped bearing boss.
+
+    Built as ONE welded loft (no booleans): every outline gets a wall with its own (z, d)
+    profile -- openings terraced (wall, round-over, ledge, wall, ...), boss and collar
+    rising from the step top, bearing hole full height -- and flat caps join the walls
+    at each height. d > 0 recedes the material edge (openings grow, bosses shrink).
+    """
+    import bmesh
+    h2 = height / 2
+    t_base = min(BASE_T, height)
+    z_body = min(-h2 + t_base + STEP_T * LAYERS, h2 - 1.5)
+    b_bot = max(0.0, min(BEVEL, t_base / 2 - 0.2))
+    b_step = max(0.0, min(BEVEL, 0.6 * STEP_INSET, STEP_T / 2 - 0.2))
+
+    # opening walls: rounded bed edge, then a round-over + ledge per level
+    lv = [(-z, d) for (z, d) in reversed(_round_over(h2, 0.0, b_bot, segments))]
+    z_top = -h2 + t_base
+    lv += _round_over(z_top, 0.0, min(b_bot, b_step) if LAYERS else b_bot, segments)[1:]
+    for i in range(1, LAYERS + 1):
+        z_next = min(-h2 + t_base + STEP_T * i, z_body)
+        lv.append((z_top + 0.01, STEP_INSET * i))  # ledge (tiny rise: no zero-area faces)
+        lv += _round_over(z_next, STEP_INSET * i, b_step, segments)
+        z_top = z_next
+
+    hole_r = BEARING_HOLE_D / 2
+    boss_r = hub_r - 1.0
+    collar_r = hole_r + 2.5 if hole_r > 0 else boss_r * 0.6
+    z_boss = h2 - 1.0
+    b_boss = max(0.0, min(BEVEL, 0.8, (boss_r - collar_r) / 2, (z_boss - z_body) / 2 - 0.1))
+    b_col = max(0.0, min(BEVEL, (collar_r - hole_r) / 2 - 0.2, (h2 - z_boss) - 0.2))
+    r_max, r_min = bore_r + RIM_OVERLAP / 2, boss_r + 0.6
+
+    outer = _circle(0, 0, bore_r + RIM_OVERLAP, 1.0)
+    boss = _circle(0, 0, boss_r, 1.0)
+    collar = _circle(0, 0, collar_r, 1.0)
+    bore = _circle(0, 0, hole_r, 1.0) if hole_r > 0 else None
+    boss_lv = [(z_body, 0.0)] + _round_over(z_boss, 0.0, b_boss, segments)
+    col_lv = [(z_boss, 0.0)] + _round_over(h2, 0.0, b_col, segments)
+
+    # (loop, profile, sign, r_max, r_min); sign -1 = material inside the loop
+    walls = [(outer, [(-h2, 0.0), (z_body, 0.0)], 1, None, None),
+             (boss, boss_lv, -1, None, None),
+             (collar, col_lv, -1, None, None)]
+    walls += [(h, lv, 1, r_max, r_min) for h in holes]
+    if bore:
+        walls.append((bore, [(-h2, 0.0), (h2, 0.0)], 1, None, None))
+
+    def ring(loop, d, sg, rmax, rmin):
+        return _grow_hole(loop, sg * d, rmax, rmin)
+
+    caps = {-h2: [ring(outer, 0, 1, None, None)] + [ring(h, lv[0][1], 1, r_max, r_min) for h in holes],
+            z_body: [ring(outer, 0, 1, None, None), ring(boss, 0, -1, None, None)]
+                    + [ring(h, lv[-1][1], 1, r_max, r_min) for h in holes],
+            z_boss: [ring(boss, boss_lv[-1][1], -1, None, None), ring(collar, 0, -1, None, None)],
+            h2: [ring(collar, col_lv[-1][1], -1, None, None)]}
+    if bore:
+        caps[-h2].append(ring(bore, 0, 1, None, None))
+        caps[h2].append(ring(bore, 0, 1, None, None))
+
+    bm = bmesh.new()
+    for loop, prof, sg, rmax, rmin in walls:
+        rings = [[bm.verts.new((x, y, z)) for (x, y) in ring(loop, d, sg, rmax, rmin)] for z, d in prof]
+        n = len(loop)
+        for ra, rb in zip(rings, rings[1:]):
+            for k in range(n):
+                m = (k + 1) % n
+                bm.faces.new((ra[k], ra[m], rb[m], rb[k]))
+    for z, loops in caps.items():
+        verts, faces = _flat_fill(loops)
+        vs = [bm.verts.new((x, y, z)) for (x, y) in verts]
+        for f in faces:
+            bm.faces.new([vs[k] for k in f])
+    bmesh.ops.remove_doubles(bm, verts=bm.verts[:], dist=1e-4)
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
+    me = bpy.data.meshes.new("_crossings")
+    bm.to_mesh(me)
+    bm.free()
+    me.shade_smooth()
+    try:
+        me.set_sharp_from_angle(angle=math.radians(35))
+    except (AttributeError, TypeError):
+        pass
+    return me
+
+
 SETTINGS = ("BEARING_HOLE_D", "HUB_WALL", "HUB_MIN_R", "SPOKE_W", "SWEEP_DEG", "FLARE", "FILLET",
             "RIM_OVERLAP", "RIM_LIP", "BEVEL", "BEVEL_SEGMENTS", "SPANDREL",
-            "THICK_RIM", "THICK_HUB", "ALIGN")
+            "THICK_RIM", "THICK_HUB", "ALIGN", "LAYERS", "BASE_T", "STEP_T", "STEP_INSET")
 
 
 def build(gear, style=None, count=None, **settings):
@@ -641,7 +766,10 @@ def _build(gear, style, count):
             if ALIGN == "front":
                 return h2 - t, h2
             return -h2, -h2 + t
-    me = _solid(plain, holes, height, bevel, max(1, BEVEL_SEGMENTS), bore_r + RIM_OVERLAP / 2, surface)
+    if LAYERS > 0:
+        me = _layered(holes, height, bore_r, hub_r, max(1, BEVEL_SEGMENTS))
+    else:
+        me = _solid(plain, holes, height, bevel, max(1, BEVEL_SEGMENTS), bore_r + RIM_OVERLAP / 2, surface)
 
     name = f"{gear.name} Crossings"
     old = bpy.data.objects.get(name)
