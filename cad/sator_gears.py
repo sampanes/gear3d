@@ -6,6 +6,7 @@ export_stl()   -- union a gear with its crossings into one solid STL for the sli
 mesh_with()    -- place a gear at the correct center distance, rotated so teeth interlock
 tooth_phase()  -- angle of a tooth center on a gear
 add_rim_dots() -- decorative ring of dimples in the rim top face
+add_hub_cut()  -- decorative pocket in the hub top face (crown / flower / sunburst / terraces)
 fit_coupon()   -- labelled test bar of hole sizes (find the bearing press fit)
 
 Shared settings are copied from a finished template gear so every gear matches
@@ -164,6 +165,104 @@ def add_rim_dots(ob, count=None, dia=2.4, depth=1.2, segments=16, r=None):
     mod.solver = "EXACT"
     mod.object = cutter
     return cutter
+
+
+HUB_CUT_STYLES = ("crown", "flower", "sunburst", "terraces")
+
+
+def _polar_solid(bm, rfun, z0, z1, n=720):
+    """Closed prism whose outline is r = rfun(angle) (must be star-shaped about the axis)."""
+    pts = [(rfun(2 * math.pi * k / n), 2 * math.pi * k / n) for k in range(n)]
+    bot = [bm.verts.new((r * math.cos(a), r * math.sin(a), z0)) for r, a in pts]
+    top = [bm.verts.new((r * math.cos(a), r * math.sin(a), z1)) for r, a in pts]
+    bm.faces.new(bot[::-1])
+    bm.faces.new(top)
+    for k in range(n):
+        m = (k + 1) % n
+        bm.faces.new((bot[k], bot[m], top[m], top[k]))
+
+
+def add_hub_cut(ob, style="flower", depth=3.0, count=None, r_in=None, r_out=None):
+    """Decorative pocket in the hub's top face, around the bearing hole.
+
+    Only the top `depth` mm is cut, so the bottom stays a plain bearing seat (an 8 mm idler
+    with depth 3 keeps 5 mm for a 5 mm wide bearing, whose top face then shows in the pocket).
+    Styles (HUB_CUT_STYLES), lobes lined up with the teeth:
+      crown    -- star pocket, `count` points (default 8)
+      flower   -- round scalloped pocket, `count` lobes (default 6)
+      sunburst -- round pocket plus `count` shallow rays between the teeth (default = teeth)
+      terraces -- three stepped rings down to the bearing
+    style=None removes the cut. Boolean modifiers, stay live.
+    """
+    p = props(ob)
+    for o in [o for o in bpy.data.objects if o.name.startswith(f"{ob.name} Hub Cut")]:
+        me = o.data
+        bpy.data.objects.remove(o)
+        bpy.data.meshes.remove(me)
+    for m in [m for m in ob.modifiers if m.name.startswith("Hub Cut")]:
+        ob.modifiers.remove(m)
+    if style is None:
+        return []
+    if style not in HUB_CUT_STYLES:
+        raise ValueError(f"unknown hub cut style: {style}")
+    r_in = r_in or p.bore_size + 1.3
+    r_out = r_out or root_radius(p) - 2.6
+    z_top = max(v[2] for v in ob.bound_box)
+    z0 = z_top - depth
+    phase = tooth_phase(ob) - ob.rotation_euler.z
+    tooth_pitch = 2 * math.pi / p.teeth
+
+    def lobed(n, f):  # f(x) for x in -0.5..0.5 (0 = lobe center) -> radius
+        pitch = 2 * math.pi / n
+        return lambda a: f(((a - phase) / pitch + 0.5) % 1.0 - 0.5, pitch)
+
+    if style == "crown":
+        def f(x, pitch):
+            t = min(max((0.30 - abs(x)) / 0.16, 0.0), 1.0)
+            return r_in + (r_out - r_in) * t * t * (3 - 2 * t)
+        solids = [(lobed(count or 8, f), z0)]
+    elif style == "flower":
+        rho = 0.75 * (r_out - r_in)
+        d = r_out - rho
+
+        def f(x, pitch):
+            s = d * math.sin(x * pitch)
+            if abs(s) >= rho:
+                return r_in
+            return max(r_in, d * math.cos(x * pitch) + math.sqrt(rho * rho - s * s))
+        solids = [(lobed(count or 6, f), z0)]
+    elif style == "sunburst":
+        phase += tooth_pitch / 2
+        ray_out = r_out + 0.4
+
+        def f(x, pitch):
+            return ray_out if abs(x) * pitch * ray_out < 0.7 else r_in
+        solids = [(lambda a: r_in, z0), (lobed(count or p.teeth, f), z_top - depth / 2)]
+    else:  # terraces
+        rs = [r_out, (r_in + r_out) / 2, r_in]
+        solids = [(lambda a, r=r: r, z_top - depth * (i + 1) / 3) for i, r in enumerate(rs)]
+
+    cutters = []
+    for i, (fn, zb) in enumerate(solids):
+        name = f"{ob.name} Hub Cut" + (f" {i + 1}" if i else "")
+        me = bpy.data.meshes.new(name)
+        bm = bmesh.new()
+        _polar_solid(bm, fn, zb, z_top + 1.0)
+        bm.to_mesh(me)
+        bm.free()
+        cutter = bpy.data.objects.new(name, me)
+        for c in ob.users_collection:
+            c.objects.link(cutter)
+        cutter.parent = ob
+        cutter.display_type = "WIRE"
+        cutter.hide_render = True
+        cutter.hide_set(True)
+        mod = ob.modifiers.new("Hub Cut" + (f" {i + 1}" if i else ""), "BOOLEAN")
+        mod.operation = "DIFFERENCE"
+        mod.solver = "EXACT"
+        mod.object = cutter
+        cutters.append(cutter)
+    return cutters
 
 
 def fit_coupon(name, sizes, wall=3.0, thick=5.0, label_h=4.0, location=(0, 0, 0)):

@@ -41,6 +41,15 @@ Ratio check: (64/96) * (96/16) = 4 relative turns per board turn.
   `Gear_Idler_16T_N/S/E/W` sit at (0, 90), (0, -90), (90, 0), (-90, 0), z 8, each rotated
   -11.25 deg to mesh; 15.9 bearing hole (bore radius 7.95), solid web (7.1 mm rim to the
   root leaves no room for crossings).
+- Idler hub cut: `sator_gears.add_hub_cut(gear, style)` sinks a decorative pocket 3 mm into the
+  top face around the bearing hole and leaves the bottom 5 mm as a plain bearing seat (the
+  bearings grip only ~5 mm). The bearing's top face shows in the pocket floor. Styles,
+  mocked up side by side before choosing:
+  - `flower` (in use on all four idlers): 6 round lobes, r 9.25 to 12.6, ~2.6 mm wall to the roots
+  - `crown`: 8-point star pocket
+  - `sunburst`: round pocket plus 16 shallow rays (half depth) between the teeth
+  - `terraces`: three stepped rings down to the bearing
+  `style=None` removes it; switching style replaces the cutters.
 - `Gear_Letter_64T_N` / `_W` mesh off the N / W idlers (top layer) at (0, 180, 8) and
   (-180, 0, 8): each concentric with the 96T below it (90 + 90 = 180). 21.9 bearing hole,
   lighter `scurve` x4 crossings so the 96T below shows through.
