@@ -97,6 +97,22 @@ Ratio check: (64/96) * (96/16) = 4 relative turns per board turn.
   y = (3 - row) * 180). Two 96T on the same layer cannot sit in orthogonally neighbouring
   cells (180 < 220.5 OD); diagonal neighbours (254.6 mm) clear.
 - Modeled backlash is 0 (teeth touch exactly); printed parts need the fit value from the coupon.
+- Letters (collection `Letters`, objects `Ltr_R<row>C<col>_<letter>`, one shared mesh per
+  letter `Letter_<X>`): `cad/sator_letters.py` `build_letters()`, one per cell centered on its
+  reference rod. Font: Lithos Pro Regular (carved Greek inscription caps, chosen for the
+  "Roman carved in stone" look of surviving SATOR squares); backup: Trajan Pro 3 Bold
+  (`build_letters("TrajanPro3-Bold.otf")`). Cap height 100 mm (measured on E; Lithos T is
+  ~97 and A ~104 by design), 4 mm thick, 0.8 mm chamfer, bottom at z 14 (2 mm above the top
+  gear layer). Each glyph is centered on its bounding box, which sits on the rod (the axis it
+  turns about). S and O are averaged with their own half-turned copy, so they are exactly the
+  same upside down (Lithos S was 0.7% of letter height off; N is 2.9 mm off but is the fixed
+  center). The fonts are commercial and installed locally: the script loads them by file
+  name, converts the letters to meshes and removes the font datablock, so no font file or
+  path is stored in the .blend or the repo.
+  - Rotation center: S, T, R, E, N have material there; A (8 mm to the nearest stroke),
+    P (3.8 mm) and O (36.8 mm, the counter) do not, so those need a bridge or mount to the gear.
+  - Open: 3D style (flat with chamfer for now; chiseled V-ridge strokes or an incised tablet
+    are the alternatives), how letters fasten to their gears.
 
 ## Printing: slice ONLY `cad/export/*.stl`
 
