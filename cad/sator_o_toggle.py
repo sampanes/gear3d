@@ -68,6 +68,14 @@ CLEAR = 12.0  # min gap from a part's edge to any other letter's axis (shaft + b
 PIN_D = 4.0
 PIN_FIT = 1.025  # hole = PIN_D * PIN_FIT (same press fit as geneva.py's pin holes)
 PIN_TOP_GAP = 0.3
+# the star's 56T only ever swings 0..SWING, so it keeps teeth just on the two arcs that pass
+# its O meshes (plus SECTOR_MARGIN teeth each end); S-curved arms tie each arc to the hub
+SECTOR_MARGIN = 2
+ARMS_PER_ARC = 2   # 2: one near each end of an arc; 1: one at its middle
+HUB_R = 19.0       # solid hub around the bore
+RIM_T = 6.0        # arc rim under the tooth roots
+ARM_W = 9.0        # arm width (flares near both ends)
+ARM_SWEEP = 70.0   # deg the arm curls between rim and hub
 
 
 def cell_xy(row, col):
@@ -193,6 +201,101 @@ def _steel_pin(gear, drive, d, star_xy, star_top, name):
     return pin
 
 
+def _sector_windows(gear, mesh_dirs):
+    """Gear-local (r, theta) outlines of the windows to remove: everything but the hub, the
+    toothed arcs that ever pass a mesh in mesh_dirs (world rad), and one arm per arc."""
+    sg = _load("sator_gears")
+    p = sg.props(gear)
+    pitch = 2 * math.pi / p.teeth
+    rz = gear.rotation_euler.z
+    ph = sg.tooth_phase(gear) - rz  # local angle of a tooth center
+    r_rim, r_out = sg.root_radius(p) - RIM_T, sg.tip_radius(p) + 3.0
+    swing, margin = math.radians(SWING), SECTOR_MARGIN * pitch
+    arcs = []
+    for d in mesh_dirs:
+        # the star turns +0..swing, so local angles d - swing .. d pass the mesh; widen each end
+        # out to the next tooth-space center so no tooth is cut
+        lo, hi = d - rz - swing - margin, d - rz + margin
+        a0 = ph + (math.floor((lo - ph) / pitch - 0.5) + 0.5) * pitch
+        a1 = ph + (math.ceil((hi - ph) / pitch - 0.5) + 0.5) * pitch
+        w = a1 - a0
+        a0 %= 2 * math.pi
+        arcs.append((a0, a0 + w))
+    arcs.sort()
+    sweep = math.radians(ARM_SWEEP)
+
+    def arm(mid, r):
+        """Arm center angle and angular half width at radius r (smoothstep curl, flared ends)."""
+        u = (r - HUB_R) / (r_rim - HUB_R)
+        s = 3 * u * u - 2 * u ** 3
+        th = mid + sweep * (1 - s)
+        slope = sweep * (6 * u - 6 * u * u) / (r_rim - HUB_R)  # -d(theta)/dr
+        hw = ARM_W / 2 + 2.5 * (math.exp(-(r - HUB_R) / 2.5) + math.exp(-(r_rim - r) / 2.5))
+        return th, hw * math.hypot(1, r * slope) / r
+
+    def arc(r, t0, t1):
+        n = max(2, int(abs(t1 - t0) / math.radians(1.0)) + 1)
+        return [(r, t0 + (t1 - t0) * i / (n - 1)) for i in range(n)]
+
+    gaps = []  # toothless spans, each also one turn later so a window can wrap past 2 pi
+    for i, (a0, a1) in enumerate(arcs):
+        n0 = arcs[(i + 1) % len(arcs)][0] + (2 * math.pi if i + 1 == len(arcs) else 0.0)
+        if n0 <= a1:
+            raise ValueError("toothed arcs overlap: the gear needs all its teeth")
+        gaps += [(a1, n0), (a1 + 2 * math.pi, n0 + 2 * math.pi)]
+    # arm rim ends: one per arc at its middle, or two set in from the arc ends (edge 1.5 in)
+    inset = (arm(0.0, r_rim)[1] * r_rim + 1.5) / r_rim
+    rims = sorted(m for a0, a1 in arcs
+                  for m in (((a0 + a1) / 2,) if ARMS_PER_ARC == 1 else (a0 + inset, a1 - inset)))
+
+    rs = [HUB_R + (r_rim - HUB_R) * i / 40 for i in range(41)]
+    windows = []
+    for k, m0 in enumerate(rims):
+        m1 = rims[(k + 1) % len(rims)] + (2 * math.pi if k + 1 == len(rims) else 0.0)
+        t, te = arm(m0, r_rim)[0] + arm(m0, r_rim)[1], arm(m1, r_rim)[0] - arm(m1, r_rim)[1]
+        if te <= t:
+            raise ValueError("arms overlap: fewer arms or a narrower ARM_W")
+        loop = [(r, arm(m0, r)[0] + arm(m0, r)[1]) for r in rs]
+        for g0, g1 in sorted(gaps):  # open the rim out past the tips across each toothless span
+            if t < g0 and g1 < te:
+                loop += arc(r_rim, t, g0)[1:] + [(r_out, g0)] + arc(r_out, g0, g1)[1:] + [(r_rim, g1)]
+                t = g1
+        loop += arc(r_rim, t, te)[1:]
+        loop += [(r, arm(m1, r)[0] - arm(m1, r)[1]) for r in reversed(rs)][1:]
+        loop += arc(HUB_R, loop[-1][1], loop[0][1])[1:-1]
+        windows.append([(r * math.cos(t), r * math.sin(t)) for r, t in loop])
+    return windows, arcs
+
+
+def _sector_cut(gear, mesh_dirs):
+    """Boolean the gear down to its toothed arcs, arms and hub (cutter parented, hidden)."""
+    windows, arcs = _sector_windows(gear, mesh_dirs)
+    me = bpy.data.meshes.new(f"{gear.name} Sector Cutter")
+    bm = bmesh.new()
+    for loop in windows:
+        lo = [bm.verts.new((x, y, -GEAR_H - 1)) for x, y in loop]
+        hi = [bm.verts.new((x, y, GEAR_H + 1)) for x, y in loop]
+        n = len(loop)
+        for i in range(n):
+            j = (i + 1) % n
+            bm.faces.new((lo[i], lo[j], hi[j], hi[i]))
+        bm.faces.new(hi)
+        bm.faces.new(lo[::-1])
+    bmesh.ops.triangulate(bm, faces=[f for f in bm.faces if len(f.verts) > 4])
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
+    bm.to_mesh(me)
+    bm.free()
+    cut = bpy.data.objects.new(me.name, me)
+    for c in gear.users_collection:
+        c.objects.link(cut)
+    cut.parent = gear
+    cut.display_type, cut.hide_render = "WIRE", True
+    cut.hide_set(True)
+    mod = gear.modifiers.new("Sector Cut", "BOOLEAN")
+    mod.operation, mod.solver, mod.object = "DIFFERENCE", "EXACT", cut
+    return [(round(math.degrees(a0), 2), round(math.degrees(a1), 2)) for a0, a1 in arcs]
+
+
 def build_unit(unit):
     sg, gv = _load("sator_gears"), _load("geneva")
     gm = gv.gm
@@ -236,6 +339,8 @@ def build_unit(unit):
         g = spur(key, OUT_T, L[key], Z_OUT, shift=OUT_SHIFT)
         sg.mesh_with(go, g, math.degrees(math.atan2(L[key][1] - L["star"][1], L[key][0] - L["star"][0])), Z_OUT)
         g.location = (*L[key], Z_OUT)  # mesh_with spaces by pitch radii; the shift makes it OUT_CENTER
+    result["sectors"] = _sector_cut(go, [math.atan2(L[k][1] - L["star"][1], L[k][0] - L["star"][0])
+                                         for k in ("O1", "O2")])
     return result
 
 
@@ -290,7 +395,9 @@ def build_o_toggles(save=False):
     for unit in UNITS:
         res = build_unit(unit)
         bpy.context.view_layer.update()
+        out = bpy.data.objects[_names(unit)["out"]]
         results[unit] = dict(geneva=res["summary"], locks=res["locks"], non_manifold=res["non_manifold"],
+                             sectors=res["sectors"], out_non_manifold=_load("geneva")._non_manifold(out),
                              check=check(unit))
     if save:
         bpy.ops.wm.save_mainfile()

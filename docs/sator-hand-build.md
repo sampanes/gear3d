@@ -243,6 +243,14 @@ reports clearances; `layout()` holds the axis positions.
 - The O's are 127.28 from the star axis; no whole tooth count fits that at module 2.25, so
   all three 56T carry profile shift +0.29 (`OUT_SHIFT`, from the involute center-distance
   formula; 57T with the star nudged 11 mm along the diagonal was the alternative).
+- The star's 56T only ever swings 0..90, so it keeps teeth only on the two arcs that pass its
+  O meshes: 90 deg of travel plus 2 teeth each end (`SECTOR_MARGIN`), widened to the next tooth
+  space, giving 19 teeth / 122 deg per arc, centered 90 and 270 deg in the built pose (the O's
+  sit on opposite sides of the star, so the arcs are opposite). Two S-curved arms per arc
+  (`ARMS_PER_ARC`; `ARM_*`: 9 wide, curling 70 deg, flared at both ends) tie each arc to the
+  hub (r 19), one set 1.5 in from each arc end so both ends are supported; arc rim 6 below the
+  tooth roots. Cut by a hidden `Sector Cutter` Boolean, so the teeth are the
+  same as the full gear's; `SECTOR_MARGIN = 1` would give 17 teeth / 109 deg.
 - The unit hangs below the board; the board's layers are unchanged. Top down: 56T output
   gears z -21..-13, star -30..-22 (bosses and pins stand on the A/B gears), A/B 64T -39..-31,
   27T + 54T -48..-40. The O letters reach the letter plane on their own shafts.
