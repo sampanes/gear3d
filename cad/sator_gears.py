@@ -61,7 +61,9 @@ def _move_to(ob, col):
     col.objects.link(ob)
 
 
-def new_spur(name, teeth, height, template, collection, bore_r=None):
+def new_spur(name, teeth, height, template, collection, bore_r=None, shift=None):
+    """shift (profile shift coefficient) overrides the template's, e.g. to span a center
+    distance that no whole tooth count fits; the bore default then follows the new root."""
     from PrecisionGears import gear_definitions
 
     bpy.ops.object.add_new_gear(gear_type="SPUR")
@@ -72,6 +74,8 @@ def new_spur(name, teeth, height, template, collection, bore_r=None):
     p.editing = True
     for k in SHARED:
         setattr(p, k, getattr(src, k))
+    if shift is not None:
+        p.shift = shift
     p.teeth = teeth
     p.height = height
     p.bore_size = bore_r if bore_r is not None else root_radius(p) - RIM

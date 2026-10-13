@@ -13,9 +13,13 @@ publish exported STLs/renders instead.
 | Letter gears | 64 | 24 | free on board | equal to middle, so middle -> idler -> letter is 1:1 (upright) |
 | Idlers | 16 | as needed | free on board | count is free: only sets spacing and direction, not ratio |
 | Big gears | 96 | 4 | free on board, N/S/E/W of middle, rear layer | planet on fixed 64T: turns -2/3 of board angle relative to board |
-| Dual-Geneva driver | 16 | 4? | on each 96T, at -45 deg | 96/16 = 6x step-up -> 4 rev per board rev = 1 rev per 90 deg detent (one O flip cycle) |
+| P letter gears (R2C4, R4C2) | 64 | 2 | free on board, bottom layer | far-letter clones; each also feeds an O toggle unit (below) |
+| O toggle drivers A/B | 64 | 4 | free on board, below the board | twin drivers of the double-Geneva toggle, mesh each other; 2 turns per board turn |
+| O toggle input / P shaft | 27 / 54 | 2 / 2 | 27T on driver A's shaft, 54T on P's shaft | P turns 1 per board turn, x2 |
+| O output | 56 (shift +0.29) | 6 | star shaft + both O's of a unit | star -> O is 1:1, so each push turns the O a quarter |
 
-Ratio check: (64/96) * (96/16) = 4 relative turns per board turn.
+Ratio check: P letter -1, x (54/27) = 2 driver turns per board turn, one toggle push and return
+per half board turn (see "O toggle units" below).
 
 ## Shared parameters
 
@@ -209,16 +213,55 @@ Bearing model numbers and widths: TBD (width matters vs 8 mm gear thickness).
   The O alternates: one quarter it drifts and clicks back (reads upright), the next it drifts
   and is carried through sideways to upside down.
 - A toggle's drivers turn once per two detents (2 turns per board turn). On the 96T (2/3 turn
-  per board turn) that is a 32T driver; the 16T in the gear-train table gives 4 (two pushes per
-  detent), which suits a 4-slot `index` drive instead (one click per detent).
+  per board turn) that is a 32T driver; a 16T gives 4 (two pushes per detent, so half the rests
+  leave the O sideways), which suits a 4-slot `index` drive instead (one click per detent).
+  Chosen: swing 90 at 2 turns per board turn.
+
+## O toggle units (`cad/sator_o_toggle.py`)
+
+One toggle drives two O's: the earlier printed toggle test rig (31T twin drivers, star, 16T
+middle mesh between two letter gears) scaled up and put on the board.
+`build_o_toggles()` builds both units and the P letter gears that feed them, and `check()`
+reports clearances; `layout()` holds the axis positions.
+
+- Unit NE: star axis on the corner point (270, 270) between the O's at R1C4 and R2C5, fed
+  from P R2C4. Unit SW is its half turn (O's R5C2 + R4C1, fed from P R4C2): same parts.
+- Train: P 64T (bottom layer, meshes its 96T) -> 54T on P's shaft -> 27T on driver A's shaft
+  (A at 2 turns per board turn) -> A 64T meshes B 64T at the star axis (they counter-rotate; each
+  carries a pin and locking boss) -> star -> 56T on the star shaft meshes both O 56T gears 1:1.
+- Toggle: `toggle(90, 72, land=7.8, bore_d=21.9)`: star R 50.9 (102 mm across), crank 50.9,
+  pin 4, lock play 3.65 / 0.5 deg (same as the printed rig).
+- Drive pins are steel (sourced), 4 mm (`PIN_D`; the slots are 4.8 wide, so change it and
+  rebuild if the pins differ). Each presses through a 4.1 mm hole (`PIN_FIT` 1.025) in its 64T
+  driver gear at r 50.9 and stands up into the star layer: pin length 16.7 mm (gear bottom
+  z -39 to 0.3 below the star top). The printed locking boss carries no pin. Grey `Pin`
+  objects in each unit's collection are stand-ins (not exported).
+- A and B sit on the grid line through the star (A at (269.3, 198.0), B at (270.7, 342.0) for
+  NE), 72 from the star: within 0.6 deg of the grid because |A - P| must be (27 + 54) * 2.25 / 2.
+  On the diagonal they covered P's axis. Rule: no part may cover another letter's axis
+  (each letter's axis stays open to the sky); the closest is 16.9 mm (A/B tips to P/R axes).
+- The O's are 127.28 from the star axis; no whole tooth count fits that at module 2.25, so
+  all three 56T carry profile shift +0.29 (`OUT_SHIFT`, from the involute center-distance
+  formula; 57T with the star nudged 11 mm along the diagonal was the alternative).
+- The unit hangs below the board; the board's layers are unchanged. Top down: 56T output
+  gears z -21..-13, star -30..-22 (bosses and pins stand on the A/B gears), A/B 64T -39..-31,
+  27T + 54T -48..-40. The O letters reach the letter plane on their own shafts.
+- All meshes checked with a BVH overlap test (clear at the modeled distance, colliding 0.15 mm
+  closer, same as the 96T-letter pairs). The future 96T E and S, placed by meshing the middle
+  gear, also mesh P R2C4 / R4C2 (the loop's tooth phases agree).
+- Phase: built at t = 0 (mid-dwell before A's push, star 0); every O rests upright or upside
+  down at each board quarter turn.
 
 ## Open questions
 
 - How the fixed middle gear mounts to the frame (no bearing; solid hub drum, r 15, full 24 mm height).
 - Idler axle support: lives in the spacer layer (z -4..4), outside the middle spacer
   (radius 68.9); the 96T below sweeps under the idler, so nothing can pass through z < -4 there.
-- What does each 16T Geneva driver mesh with -- the 96T directly? What does "-45 deg"
-  measure from?
-- Which O does each of the four 96T gears drive (O's are at (1,4) (2,5) (4,1) (5,2),
-  not directly N/S/E/W of center)?
 - Letter-gear tree: which letters chain off which (keep paths short, no closed loops)?
+- Corner R's (R1C5, R5C1), lower priority: each touches only its two O's and, diagonally,
+  P, and the O toggle sits on the P -> R path. Idea: a free idler on the star's axis (own
+  bearing, own layer) meshing P 64T and R 64T: 49T at module 2.25 spans 127.125 of the needed
+  127.28 (0.16 mm loose) -- or shift it like the 56T. R then turns with P (upright).
+- O toggle hardware: shafts and supports for the hanging unit (star + 56T on one shaft, A +
+  27T, B, P + 54T); union each driver's locking boss onto its 64T for export (A and B
+  differ: the pin hole sits at a different tooth phase on each).
