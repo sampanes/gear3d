@@ -106,7 +106,10 @@ Ratio check: (64/96) * (96/16) = 4 relative turns per board turn.
   gear layer). Each glyph is centered on its bounding box, which sits on the rod (the axis it
   turns about). S and O are averaged with their own half-turned copy, so they are exactly the
   same upside down (Lithos S was 0.7% of letter height off; N is 2.9 mm off but is the fixed
-  center). The fonts are commercial and installed locally: the script loads them by file
+  center). The O is narrowed to 75% of the font's width (`o_width=0.75`, 75 x 101 mm),
+  keeping the font's stroke widths, so a quarter turn of the Geneva-driven O is visible while it
+  still reads the same upside down. Material `Letter_Gold` (placeholder look).
+  The fonts are commercial and installed locally: the script loads them by file
   name, converts the letters to meshes and removes the font datablock, so no font file or
   path is stored in the .blend or the repo.
   - Rotation center: S, T, R, E, N have material there; A (8 mm to the nearest stroke),

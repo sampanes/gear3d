@@ -2,6 +2,9 @@
 
 build_letters() -- one solid letter per cell of the square, centered on its reference rod
 
+o_width narrows the O (fraction of the font's width) while keeping its stroke widths, so it
+still reads the same upside down but visibly changes when it turns a quarter.
+
 Letters are cut from an installed font (looked up by file name in the Windows font
 folders) and converted to plain meshes, so the .blend never carries or links the font
 file. Each glyph is centered on its own bounding box: that center sits on the rod, the
@@ -96,6 +99,21 @@ def _half_turn_average(loop, cx, cy, n=1200):
     return q
 
 
+def _narrow_o(loops, cx, cy, frac):
+    """Narrow an O to `frac` of its width, keeping the font's stroke widths (see module doc).
+
+    The outer edge is scaled across; the counter is scaled across by just enough to keep the
+    side strokes at their original width (top and bottom are untouched).
+    """
+    outer, inner = sorted(loops, key=lambda lp: _bbox([lp])[2] - _bbox([lp])[0], reverse=True)[:2]
+    ox0, _, ox1, _ = _bbox([outer])
+    ix0, _, ix1, _ = _bbox([inner])
+    side = ((ox1 - ox0) - (ix1 - ix0)) / 2
+    k_in = (frac * (ox1 - ox0) - 2 * side) / (ix1 - ix0)
+    return [[(cx + (x - cx) * frac, y) for x, y in outer],
+            [(cx + (x - cx) * k_in, y) for x, y in inner]]
+
+
 def _bbox(loops):
     xs = [x for lp in loops for x, _ in lp]
     ys = [y for lp in loops for _, y in lp]
@@ -133,8 +151,23 @@ def _letter_mesh(name, loops, thick, chamfer):
     return me
 
 
+def _gold():
+    mat = bpy.data.materials.get("Letter_Gold") or bpy.data.materials.new("Letter_Gold")
+    mat.diffuse_color = (0.95, 0.70, 0.22, 1.0)  # viewport (Solid shading)
+    mat.metallic = 1.0
+    mat.roughness = 0.3
+    if mat.node_tree is None:
+        mat.use_nodes = True
+    bsdf = mat.node_tree.nodes.get("Principled BSDF")
+    if bsdf is not None:
+        bsdf.inputs["Base Color"].default_value = (1.0, 0.72, 0.29, 1.0)
+        bsdf.inputs["Metallic"].default_value = 1.0
+        bsdf.inputs["Roughness"].default_value = 0.3
+    return mat
+
+
 def build_letters(font_file="LithosPro-Regular.otf", height=100.0, thick=4.0, z=14.0,
-                  chamfer=0.8, symmetric="SO", collection="Letters"):
+                  chamfer=0.8, symmetric="SO", o_width=0.75, collection="Letters"):
     """(Re)build all 25 letters. height = cap height in mm (measured on E); z = letter bottom."""
     col = bpy.data.collections.get(collection)
     if col is None:
@@ -145,6 +178,7 @@ def build_letters(font_file="LithosPro-Regular.otf", height=100.0, thick=4.0, z=
         bpy.data.objects.remove(o)
         if me.users == 0:
             bpy.data.meshes.remove(me)
+    gold = _gold()
     font = bpy.data.fonts.load(font_path(font_file), check_existing=False)
     try:
         x0, y0, x1, y1 = _bbox(_glyph_loops(font, "E"))
@@ -154,6 +188,8 @@ def build_letters(font_file="LithosPro-Regular.otf", height=100.0, thick=4.0, z=
             loops = _glyph_loops(font, ch)
             bx0, by0, bx1, by1 = _bbox(loops)
             cx, cy = (bx0 + bx1) / 2, (by0 + by1) / 2
+            if ch == "O" and o_width != 1.0:
+                loops = _narrow_o(loops, cx, cy, o_width)
             if ch in symmetric:
                 loops = [_half_turn_average(lp, cx, cy) for lp in loops]
             loops = [[((x - cx) * scale, (y - cy) * scale) for x, y in lp] for lp in loops]
@@ -161,6 +197,7 @@ def build_letters(font_file="LithosPro-Regular.otf", height=100.0, thick=4.0, z=
             if old is not None and old.users == 0:
                 bpy.data.meshes.remove(old)
             meshes[ch] = _letter_mesh(f"Letter_{ch}", loops, thick, chamfer)
+            meshes[ch].materials.append(gold)
     finally:
         bpy.data.fonts.remove(font)  # keep no font datablock (or path) in the .blend
     for r, word in enumerate(SQUARE):
@@ -169,5 +206,5 @@ def build_letters(font_file="LithosPro-Regular.otf", height=100.0, thick=4.0, z=
             ob.location = ((c - 2) * PITCH, (2 - r) * PITCH, z)
             col.objects.link(ob)
     col["letters"] = (f"font={font_file} height={height} thick={thick} z={z} chamfer={chamfer} "
-                      f"symmetric={symmetric}")
+                      f"symmetric={symmetric} o_width={o_width}")
     return col
