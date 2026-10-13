@@ -180,6 +180,38 @@ Bearing model numbers and widths: TBD (width matters vs 8 mm gear thickness).
   depending on idler offset.
 - 96T gears at 180 mm from center overlap the letter layer, so they live on a rear layer.
 
+## Geneva drives (`cad/geneva_math.py`, `cad/geneva.py`)
+
+- `geneva_math.py` (numpy only; runs outside Blender too, `python cad/geneva_math.py` self-checks)
+  holds the geometry and motion. Swing per push 2*amp and centre distance c fix everything:
+  crank a = c sin(amp), star rim R = c cos(amp), push = 180 - 2*amp deg of driver turn.
+  Slots and pockets are lists of angles, so `index(n)` (plain Geneva, `pins=2` for two
+  indexes per turn), `toggle(swing)` (double-Geneva, drivers on opposite sides) and
+  `meshed_toggle(swing, pitch_r)` (drivers geared to each other; c = pitch_r / sin(amp)) share
+  one code path. Locking discs are carved by sweeping the star through a whole cycle in each
+  driver's frame. `check()` samples a cycle for clearances and measures how far each dwell can be
+  forced (lock play); `board_motion()` gives a board-riding letter's world angle.
+- `geneva.py` builds a set (star + drivers, plate / air gap / star layer, printed pin or
+  pin hole), stores its settings on the parent empty (`rebuild()`), and `animate()` keyframes one
+  driver turn on a cycle. Each part exports as one shell with `sator_gears.export_stl`
+  (`plate_t=0` leaves the pin as a separate shell until it is unioned onto a gear).
+- The earlier printed double-Geneva star matches `toggle(90, 50.715, land=7.8)` to 0.05 mm
+  median (pin 4, slot 4.8, star 71.7 mm).
+- O toggle (board-riding O, letter turns 90/swing x the star so each push is a quarter turn):
+
+  | Swing | Moving | Push (board deg per 90) | O drift each side of a detent | Lock play (deg) |
+  | --- | --- | --- | --- | --- |
+  | 45 (+-22.5, R 2) | 75% | 67.5 | 11 | 12.7 / 1.4 (barely locks) |
+  | 90 (R 1) | 50% | 45 | 22.5 | 3.7 / 0.7 with land 7.8 |
+
+  With drivers on opposite sides, swings over 90 do not fit on the star (pockets collide).
+  Bigger swings fit only with meshed drivers, up to 120.
+  The O alternates: one quarter it drifts and clicks back (reads upright), the next it drifts
+  and is carried through sideways to upside down.
+- A toggle's drivers turn once per two detents (2 turns per board turn). On the 96T (2/3 turn
+  per board turn) that is a 32T driver; the 16T in the gear-train table gives 4 (two pushes per
+  detent), which suits a 4-slot `index` drive instead (one click per detent).
+
 ## Open questions
 
 - How the fixed middle gear mounts to the frame (no bearing; solid hub drum, r 15, full 24 mm height).
