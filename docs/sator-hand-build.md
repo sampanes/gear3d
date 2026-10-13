@@ -26,7 +26,7 @@ Ratio check: (64/96) * (96/16) = 4 relative turns per board turn.
 | Pressure angle | 25 deg | thicker roots on 16T (20 deg undercuts below 17T); ~28% more radial load than 20 |
 | Helix angle | 0 (spur) | drop-in assembly, no axial thrust, no handedness to manage |
 | Rim under teeth | >= 8 mm | stiff enough that a large thin wheel does not flex out of mesh; 96T uses bore radius 97 (root radius 105.2) |
-| Crossings | `cad/crossings.py` | vary the style between neighbouring gears; layered (raised steps on a thin base web, see below). 96T: `scurve` x6, 2 steps; near (front) 64T letters: `scurve` x4, 1 step; far 64T letters: `ringed` x5, 2 steps; all with 21.9 bearing hole; middle 64T: `gothic` x8, rounded-triangle spandrels, 2 steps on an 8 mm base web, solid hub drum full height (no hole). All: 1.2 mm rounded edges, overlap rim 1 mm (export gear + crossings as one STL) |
+| Crossings | `cad/crossings.py` | vary the style between neighbouring gears; layered (raised steps on a thin base web, see below). 96T: `straight` x8 with barbs, 2 steps; near (front) 64T letters: `scurve` x4, 1 step; far 64T letters: `ringed` x5, 2 steps; all with 21.9 bearing hole; middle 64T: `gothic` x8, rounded-triangle spandrels, 2 steps on an 8 mm base web, solid hub drum full height (no hole). All: 1.2 mm rounded edges, overlap rim 1 mm (export gear + crossings as one STL) |
 | Backlash / fit | TBD | gear3d `sator.fit` default is 0.25 mm; settle with a printed fit coupon |
 
 ## Blender scene (`cad/sator_hand_build.blend`)
@@ -65,12 +65,19 @@ Ratio check: (64/96) * (96/16) = 4 relative turns per board turn.
   Current settings (all `BEARING_HOLE_D=21.9`):
   - front letters N/W: `scurve` x4, `SPOKE_W=6`, `LAYERS=1, BASE_T=3.5, STEP_T=2, STEP_INSET=1.25`
     (~80% of the bore open, was 68% with scurve x6)
-  - 96T N/W: `scurve` x6, `SPOKE_W=8.5`, `LAYERS=2, BASE_T=3, STEP_T=1.75, STEP_INSET=1.25` (~77%)
+  - 96T N/W: `straight` x8, `SPOKE_W=8.5`, `LAYERS=2, BASE_T=3, STEP_T=1.75, STEP_INSET=1.25`,
+    `BARBS=2, BARB_AT=(1/3, 0.8)` -- pointed barbs on each spoke side, the outer pair at r ~81 in
+    the ring that shows around the letter gear on top (r 74 to 97), the inner pair through the
+    letter's windows. Replaced `scurve` x6, which matched the letter on top. Runners-up from the
+    comparison renders: `quatrefoil` x6 with `FOIL_EXTRA="trefoil"` (lacy, more PLA), `quatrefoil`
+    x5 with `FOIL_EXTRA="circle"`, straight x6 with bigger barbs (`BARB_H=6, BARB_L=16`)
   - far letters N2/W2: `ringed` x5, `SPOKE_W=7`, 2 steps with `STEP_INSET=1.0` (~57%; 1.25 leaves
     the thin outer spokes with no flat top)
   - middle: `gothic` x8, `SPOKE_W=8`, `BEARING_HOLE_D=0`, `LAYERS=2, BASE_T=8, STEP_T=3, STEP_INSET=1.25`
   - Each step narrows a wall by 2 x (STEP_INSET + rounding) in total; `crossings.py` refuses a
-    build whose top walls would be under 0.8 mm.
+    build whose top walls would be under 0.8 mm. Sharp points (barbs, foil cusps) fold over
+    themselves when a step pulls the edge in; `_untangle` trims those folds. Crossings built
+    before that fix (the letter gears) still carry tiny hidden folds until they are rebuilt.
   Layered crossings keep every step on the top face, so they print support-free.
 - Rim decoration (all crossing gears): inner rim teeth (`RIM_TEETH` = the gear's tooth count,
   `RIM_TEETH_H=2.5`, lined up with the outer teeth, flush with the step top) where a window

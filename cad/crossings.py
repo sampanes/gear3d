@@ -16,10 +16,12 @@ Styles:
              the arch tops
   ringed  -- clock wheel: straight tapered spokes to a middle ring, twice as
              many (offset) from the ring to the rim
-  trefoil / quatrefoil -- a ring of gothic foil windows
+  trefoil / quatrefoil -- a ring of gothic foil windows, optionally with small
+             cut-outs in the solid wedges between them (FOIL_EXTRA)
   flame   -- flamboyant-gothic mouchettes: curved daggers, pointed at the hub,
              round-headed near the rim (curl set by SWEEP_DEG)
-  straight -- classic machine-wheel spokes, tapered from hub to rim
+  straight -- classic machine-wheel spokes, tapered from hub to rim; optional
+             pointed barbs along each side (BARBS / BARB_AT)
   holes   -- pierced disc: a ring of big round holes, small ones nestled between
 
 Any style can be layered (LAYERS > 0): a thin base web flat on the bed, each raised
@@ -56,6 +58,14 @@ STEP_T = 2.0         # layered: height of each raised step
 STEP_INSET = 1.5     # layered: each step is this much narrower (per side) than the one below
 RIM_TEETH = 0        # layered: decorative inner teeth along the rim edge, count (0 = off; try the gear's tooth count)
 RIM_TEETH_H = 2.5    # layered: how far the inner teeth reach in from the bore
+BARBS = 0            # straight: pointed spurs along each spoke side (2 -> at 1/3 and 2/3; 0 = off)
+BARB_AT = ()         # straight: spur positions as fractions of the spoke, hub 0 .. rim 1 (overrides BARBS)
+BARB_H = 4.0         # straight: how far a spur sticks out sideways from the spoke edge
+BARB_L = 12.0        # straight: spur length along the spoke, at its base
+BARB_SWEEP = 0.0     # straight: spur tip position, 0 = symmetric point, + toward the rim, - toward the hub
+BARB_FILLET = 0.8    # straight with barbs: corner rounding (small, so the points stay sharp)
+FOIL_EXTRA = "none"  # trefoil / quatrefoil: extra cut-outs in the solid wedges between the foils --
+                     # "trefoil", "circle" or "none"
 # ========================
 
 TAU = 2.0 * math.pi
@@ -185,8 +195,9 @@ def _spoke_openings(style, count, r_in, r_out):
     return _between([edges(k) for k in range(count)], r_in, r_out)
 
 
-def _between(all_edges, r_in, r_out):
+def _between(all_edges, r_in, r_out, fillet=None):
     """Openings between neighbouring spokes; all_edges = [(leading, trailing), ...] by angle."""
+    fillet = FILLET if fillet is None else fillet
     count = len(all_edges)
     holes = []
     for k in range(count):
@@ -205,7 +216,7 @@ def _between(all_edges, r_in, r_out):
             while b_in <= a_in:
                 b_in += TAU
             poly = a + _arc(r_out, a_out, b_out)[1:-1] + b[::-1] + _arc(r_in, b_in, a_in)[1:-1]
-        holes.append(_smooth(poly, FILLET))
+        holes.append(_smooth(poly, fillet))
     return holes
 
 
@@ -364,14 +375,34 @@ def _spandrel_triangles(holes, count, r_in, r_lim, wall):
 
 # ---- more tracery: ringed clock wheel, foils, flames ------------------------------
 
-def _ray_edges(angle, r0, r1, w0, w1):
+def _barb_positions():
+    return list(BARB_AT) if BARB_AT else [k / (BARBS + 1) for k in range(1, BARBS + 1)]
+
+
+def _barb(u, r0, r1):
+    """Extra half-width of a barbed spoke at radius u (pointed spurs at _barb_positions())."""
+    at = _barb_positions()
+    if not at:
+        return 0.0
+    half = BARB_L / 2
+    tip = max(-0.9, min(0.9, BARB_SWEEP))  # tip position inside the spur, -1 hub end .. 1 rim end
+    out = 0.0
+    for f_at in at:
+        s = (u - (r0 + (r1 - r0) * f_at)) / half
+        if -1.0 < s < 1.0:
+            f = (1 + s) / (1 + tip) if s < tip else (1 - s) / (1 - tip)
+            out = max(out, BARB_H * f)
+    return out
+
+
+def _ray_edges(angle, r0, r1, w0, w1, barbs=False):
     """(leading, trailing) edges of a straight spoke along `angle`, width w0 at r0 -> w1 at r1."""
     c, s = math.cos(angle), math.sin(angle)
     plus, minus = [], []
     for i in range(401):
         u = (r1 + 5.0) * i / 400
         t = min(max((u - r0) / (r1 - r0), 0.0), 1.0)
-        h = (w0 + (w1 - w0) * t) / 2
+        h = (w0 + (w1 - w0) * t) / 2 + (_barb(u, r0, r1) if barbs else 0.0)
         plus.append((u * c - h * s, u * s + h * c))
         minus.append((u * c + h * s, u * s - h * c))
     return _clip_radial(plus, r0, r1), _clip_radial(minus, r0, r1)
@@ -390,9 +421,9 @@ def _ringed_openings(count, r_in, r_out):
 
 def _straight_openings(count, r_in, r_out):
     w = SPOKE_W
-    spokes = [_ray_edges(TAU * k / count, r_in, r_out, w * (1 + FLARE), w * (1 + FLARE / 3))
+    spokes = [_ray_edges(TAU * k / count, r_in, r_out, w * (1 + FLARE), w * (1 + FLARE / 3), True)
               for k in range(count)]
-    return _between(spokes, r_in, r_out)
+    return _between(spokes, r_in, r_out, BARB_FILLET if _barb_positions() else FILLET)
 
 
 def _holes_openings(count, r_in, r_out):
@@ -445,7 +476,32 @@ def _foil_openings(lobes, count, r_in, r_out):
         a = TAU * k / count
         f = _smooth(_foil(lobes, rho, 0.8 * rho, a), min(FILLET, 1.0))
         holes.append([(x + rc * math.cos(a), y + rc * math.sin(a)) for (x, y) in f])
-    return holes
+    if FOIL_EXTRA == "none":
+        return holes
+    # extra cut-outs in the solid wedges between neighbouring foils, toward the rim and the hub
+    extras = []
+    for k in range(count):
+        a = TAU * (k + 0.5) / count
+        near = holes[k][::4] + holes[(k + 1) % count][::4]
+        for lo, hi, outward in ((rc, r_out, True), (r_in, rc, False)):
+            best = (0.0, 0.0)
+            for i in range(160):
+                r = lo + (hi - lo) * i / 159
+                cx, cy = r * math.cos(a), r * math.sin(a)
+                ext = min(min(math.hypot(x - cx, y - cy) for x, y in near) - w,
+                          (r_out - r - w / 2) if outward else (r - r_in - w / 2))
+                if ext > best[0]:
+                    best = (ext, r)
+            ext, r = best
+            if ext < 2.5:
+                continue
+            if FOIL_EXTRA == "circle":
+                shape = _circle(0, 0, ext, 3.0)
+            else:  # small trefoil, a lobe pointing along the wedge
+                r3 = ext / 1.8
+                shape = _smooth(_foil(3, r3, 0.8 * r3, a if outward else a + math.pi), min(FILLET, 0.8))
+            extras.append([(x + r * math.cos(a), y + r * math.sin(a)) for (x, y) in shape])
+    return holes + extras
 
 
 def _flame_openings(count, r_in, r_out):
@@ -513,11 +569,93 @@ def _grow_hole(loop, d, r_max=None, r_min=None, fixed=None):
         elif r_min is not None and r < r_min:
             x, y = x * r_min / r, y * r_min / r
         out.append((x, y))
+    return _untangle(out)
+
+
+def _seg_cross(p0, p1, q0, q1):
+    """Intersection point of segments p0-p1 and q0-q1, or None."""
+    rx, ry = p1[0] - p0[0], p1[1] - p0[1]
+    sx, sy = q1[0] - q0[0], q1[1] - q0[1]
+    den = rx * sy - ry * sx
+    if den == 0:
+        return None
+    t = ((q0[0] - p0[0]) * sy - (q0[1] - p0[1]) * sx) / den
+    u = ((q0[0] - p0[0]) * ry - (q0[1] - p0[1]) * rx) / den
+    if 0 < t < 1 and 0 < u < 1:
+        return p0[0] + rx * t, p0[1] + ry * t
+    return None
+
+
+def _untangle(loop, window=120):
+    """Remove the little self-crossing loops ("swallowtails") that offsetting leaves at sharp
+    points (barbs, foil cusps). The point count stays the same -- the walls bridge rings point
+    for point -- so the stretch around a loop is redrawn through the crossing point and its
+    points are spread evenly along it (packing them into the gap breaks the cap fill)."""
+    n = len(loop)
+    out = list(loop)
+    window = min(window, n // 3)
+    pad = min(20, n // 8)
+    i = 0
+    while i < n:
+        a0, a1 = out[i], out[(i + 1) % n]
+        ax0, ax1 = min(a0[0], a1[0]), max(a0[0], a1[0])
+        ay0, ay1 = min(a0[1], a1[1]), max(a0[1], a1[1])
+        hit = None
+        for j in range(i + 2, min(i + window, i + n - 1)):
+            b0, b1 = out[j % n], out[(j + 1) % n]
+            if max(b0[0], b1[0]) < ax0 or min(b0[0], b1[0]) > ax1 or \
+               max(b0[1], b1[1]) < ay0 or min(b0[1], b1[1]) > ay1:
+                continue
+            p = _seg_cross(a0, a1, b0, b1)
+            if p is not None:
+                hit, cross = j, p
+        if hit is not None:
+            lo, hi = i - pad, hit + 1 + pad  # indices (mod n) redrawn, ends kept
+            path = [out[k % n] for k in range(lo, i + 1)] + [cross] + \
+                   [out[k % n] for k in range(hit + 1, hi + 1)]
+            cum = [0.0]
+            for a, b in zip(path, path[1:]):
+                cum.append(cum[-1] + math.dist(a, b))
+            m = hi - lo
+            seg = 0
+            for k in range(1, m):
+                s = cum[-1] * k / m
+                while seg < len(path) - 2 and cum[seg + 1] < s:
+                    seg += 1
+                f = (s - cum[seg]) / max(cum[seg + 1] - cum[seg], 1e-12)
+                (x0, y0), (x1, y1) = path[seg], path[seg + 1]
+                out[(lo + k) % n] = (x0 + (x1 - x0) * f, y0 + (y1 - y0) * f)
+            i = hit + pad
+        i += 1
     return out
 
 
 def _flat_fill(loops):
-    """Triangulate 2D outlines (even-odd: nested loops become holes); returns (verts, faces)."""
+    """Triangulate 2D outlines (even-odd: nested loops become holes); returns (verts, faces).
+
+    Blender's curve fill occasionally drops a stretch of edges on long nearly-straight runs
+    (seen on barbed spokes). Every outline edge must come out as a boundary edge exactly
+    once; if not, refill with the input turned a fraction of a degree (the fill sweeps
+    along an axis, so that changes its decisions) and turn the result back."""
+    total = sum(len(loop) for loop in loops)
+    first = None
+    for deg in (0.0, 0.37, 1.13, 2.71, 5.3):
+        c, s = math.cos(math.radians(deg)), math.sin(math.radians(deg))
+        turned = [[(x * c - y * s, x * s + y * c) for (x, y) in loop] for loop in loops]
+        verts, faces = _curve_fill(turned)
+        verts = [(x * c + y * s, -x * s + y * c) for (x, y) in verts]
+        first = first or (verts, faces)
+        edges = {}
+        for f in faces:
+            for a, b in zip(f, f[1:] + f[:1]):
+                k = (a, b) if a < b else (b, a)
+                edges[k] = edges.get(k, 0) + 1
+        if len(verts) == total and sum(1 for n in edges.values() if n == 1) == total:
+            return verts, faces
+    return first  # no clean fill found: keep the plain result
+
+
+def _curve_fill(loops):
     cu = bpy.data.curves.new("_crossings_fill", "CURVE")
     cu.dimensions = "2D"
     cu.fill_mode = "BOTH"
@@ -789,7 +927,7 @@ def _layered(holes, height, bore_r, hub_r, segments, teeth_phase=0.0):
 SETTINGS = ("BEARING_HOLE_D", "HUB_WALL", "HUB_MIN_R", "SPOKE_W", "SWEEP_DEG", "FLARE", "FILLET",
             "RIM_OVERLAP", "RIM_LIP", "BEVEL", "BEVEL_SEGMENTS", "SPANDREL",
             "THICK_RIM", "THICK_HUB", "ALIGN", "LAYERS", "BASE_T", "STEP_T", "STEP_INSET",
-            "RIM_TEETH", "RIM_TEETH_H")
+            "RIM_TEETH", "RIM_TEETH_H", "BARBS", "BARB_AT", "BARB_H", "BARB_L", "BARB_SWEEP", "BARB_FILLET", "FOIL_EXTRA")
 
 
 def build(gear, style=None, count=None, **settings):
