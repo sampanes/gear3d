@@ -363,67 +363,8 @@ def fit_coupon(name, sizes, wall=3.0, thick=5.0, label_h=4.0, location=(0, 0, 0)
     return ob
 
 
-def export_stl(gear, path=None, extra=()):
-    """Union a gear with its crossings into ONE solid and write a binary STL.
-
-    Exporting the gear and crossings as separate shells makes the slicer treat them
-    as separate parts: each gets its own perimeters and the overlap becomes a seam of
-    walls instead of continuous infill. The union removes that seam.
-    `extra`: more objects printed as part of the same piece (another gear on the same
-    shaft, a tube joining them); each comes with its own crossings.
-    Coordinates are gear-local (axis at the origin). Returns (path, shells, non_manifold).
-    """
-    import os
-    import struct
-
-    if path is None:
-        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "export", gear.name + ".stl")
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    dg = bpy.context.evaluated_depsgraph_get()
-    me = bpy.data.meshes.new_from_object(gear.evaluated_get(dg))
-    tmp = bpy.data.objects.new(gear.name + " Export", me)
-    bpy.context.scene.collection.objects.link(tmp)
-    tmp.matrix_world = gear.matrix_world
-    # Crossings faces that are almost (not exactly) coplanar with the gear faces, e.g. a
-    # flat back at z -11.999999 vs -12, leave open slivers in an EXACT union. Squeeze each
-    # crossings copy 0.01 mm in from top and bottom (far below a print layer) so no face
-    # is near-coplanar.
-    copies = []
-    for e in extra:
-        ec = bpy.data.objects.new(e.name + " Export", bpy.data.meshes.new_from_object(e.evaluated_get(dg)))
-        bpy.context.scene.collection.objects.link(ec)
-        ec.matrix_world = e.matrix_world
-        copies.append(ec)
-        mod = tmp.modifiers.new("Union " + e.name, "BOOLEAN")
-        mod.operation, mod.solver, mod.object = "UNION", "EXACT", ec
-    for c in [c for p in (gear, *extra) for c in p.children]:
-        if c.type == "MESH" and c.name.endswith(" Crossings"):
-            cme = bpy.data.meshes.new_from_object(c.evaluated_get(dg))
-            z0 = min(v.co.z for v in cme.vertices)
-            z1 = max(v.co.z for v in cme.vertices)
-            k = (z1 - z0 - 0.02) / (z1 - z0)
-            for v in cme.vertices:
-                v.co.z = (z0 + z1) / 2 + (v.co.z - (z0 + z1) / 2) * k
-            cc = bpy.data.objects.new(c.name + " Export", cme)
-            bpy.context.scene.collection.objects.link(cc)
-            cc.matrix_world = c.matrix_world
-            copies.append(cc)
-            mod = tmp.modifiers.new("Union " + c.name, "BOOLEAN")
-            mod.operation = "UNION"
-            mod.solver = "EXACT"
-            mod.object = cc
-    bpy.context.view_layer.update()
-    dg = bpy.context.evaluated_depsgraph_get()
-    bm = bmesh.new()
-    bm.from_object(tmp, dg)
-    for o in [tmp] + copies:
-        m = o.data
-        bpy.data.objects.remove(o)
-        bpy.data.meshes.remove(m)
-    bmesh.ops.triangulate(bm, faces=bm.faces[:])
+def _shells(bm):
     bm.verts.index_update()
-    non_manifold = sum(1 for e in bm.edges if not e.is_manifold)
-    # count shells
     seen, shells = set(), 0
     for v in bm.verts:
         if v.index in seen:
@@ -438,6 +379,144 @@ def export_stl(gear, path=None, extra=()):
                 if o.index not in seen:
                     seen.add(o.index)
                     stack.append(o)
+    return shells
+
+
+def _probes(ob, n=300, depth=0.05):
+    """World points just inside ob (ob's own triangles pushed in along their normals)."""
+    bm = bmesh.new()
+    bm.from_mesh(ob.data)
+    bm.transform(ob.matrix_world)
+    bmesh.ops.triangulate(bm, faces=bm.faces[:])
+    faces = [f for f in bm.faces if f.calc_area() > 1e-4]
+    step = max(1, len(faces) // n)
+    pts = [f.calc_center_median() - f.normal * depth for f in faces[::step]]
+    bm.free()
+    return pts
+
+
+def _missing(bm_world, probes, tol=0.1):
+    """Names of pieces whose inside points mostly fall outside the solid (dropped by EXACT)."""
+    from mathutils.bvhtree import BVHTree
+
+    tree = BVHTree.FromBMesh(bm_world)
+    out = []
+    for name, pts in probes.items():
+        bad = 0
+        for p in pts:
+            loc, nrm, _, _ = tree.find_nearest(p)
+            if loc is None or (p - loc).dot(nrm) > 0:
+                bad += 1
+        if bad > tol * len(pts):
+            out.append(name)
+    return out
+
+
+def export_stl(gear, path=None, extra=(), tries=24):
+    """Union a gear with its crossings into ONE solid and write a binary STL.
+
+    Exporting the gear and crossings as separate shells makes the slicer treat them
+    as separate parts: each gets its own perimeters and the overlap becomes a seam of
+    walls instead of continuous infill. The union removes that seam.
+    `extra`: more objects printed as part of the same piece (another gear on the same
+    shaft, a tube joining them); each comes with its own crossings.
+    The EXACT union depends on the order it merges the pieces in: some orders silently drop
+    a piece (still one closed shell, so shells / non-manifold do not show it) or tear the
+    result. Each result is checked (one shell, no open edges, points just inside every
+    piece lie inside the solid); on a failure other orders are tried, up to `tries`.
+    Coordinates are gear-local (axis at the origin). Returns (path, shells, non_manifold,
+    missing pieces).
+    """
+    import itertools
+    import os
+    import struct
+
+    if path is None:
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "export", gear.name + ".stl")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    dg = bpy.context.evaluated_depsgraph_get()
+    base = bpy.data.objects.new(gear.name + " Export", bpy.data.meshes.new_from_object(gear.evaluated_get(dg)))
+    bpy.context.scene.collection.objects.link(base)
+    base.matrix_world = gear.matrix_world
+    # Crossings faces that are almost (not exactly) coplanar with the gear faces, e.g. a
+    # flat back at z -11.999999 vs -12, leave open slivers in an EXACT union. Squeeze each
+    # crossings copy 0.01 mm in from top and bottom (far below a print layer) so no face
+    # is near-coplanar.
+    copies = []
+    for e in extra:
+        ec = bpy.data.objects.new(e.name + " Export", bpy.data.meshes.new_from_object(e.evaluated_get(dg)))
+        bpy.context.scene.collection.objects.link(ec)
+        ec.matrix_world = e.matrix_world
+        copies.append(ec)
+    for c in [c for p in (gear, *extra) for c in p.children]:
+        if c.type == "MESH" and c.name.endswith(" Crossings"):
+            cme = bpy.data.meshes.new_from_object(c.evaluated_get(dg))
+            z0 = min(v.co.z for v in cme.vertices)
+            z1 = max(v.co.z for v in cme.vertices)
+            k = (z1 - z0 - 0.02) / (z1 - z0)
+            for v in cme.vertices:
+                v.co.z = (z0 + z1) / 2 + (v.co.z - (z0 + z1) / 2) * k
+            cc = bpy.data.objects.new(c.name + " Export", cme)
+            bpy.context.scene.collection.objects.link(cc)
+            cc.matrix_world = c.matrix_world
+            copies.append(cc)
+    pieces = [base] + copies
+    bpy.context.view_layer.update()
+    probes = {p.name: _probes(p) for p in pieces}
+    to_gear = gear.matrix_world.inverted()
+
+    def union(order):
+        first = order[0]
+        tmp = bpy.data.objects.new("Export Union", first.data.copy())
+        bpy.context.scene.collection.objects.link(tmp)
+        tmp.matrix_world = first.matrix_world
+        for o in order[1:]:
+            mod = tmp.modifiers.new("Union " + o.name, "BOOLEAN")
+            mod.operation, mod.solver, mod.object = "UNION", "EXACT", o
+        bpy.context.view_layer.update()
+        bm = bmesh.new()
+        bm.from_object(tmp, bpy.context.evaluated_depsgraph_get())
+        mw = tmp.matrix_world.copy()
+        m = tmp.data
+        bpy.data.objects.remove(tmp)
+        bpy.data.meshes.remove(m)
+        bmesh.ops.triangulate(bm, faces=bm.faces[:])
+        # EXACT can leave a few vertices a hair apart (< 1e-5) where they should be one
+        bmesh.ops.remove_doubles(bm, verts=bm.verts[:], dist=1e-5)
+        world = bm.copy()
+        world.transform(mw)
+        if first is not base:
+            bm.transform(to_gear @ mw)  # gear-local, as with the base first
+        missing = _missing(world, probes)
+        world.free()
+        nm = sum(1 for e in bm.edges if not e.is_manifold)
+        return bm, _shells(bm), nm, missing
+
+    # the given order first (so parts that merge cleanly export as before), then every order,
+    # taking each piece as the starting one in turn
+    groups = [[list(o) for o in itertools.permutations(pieces) if o[0] is p and list(o) != pieces][::-1]
+              for p in pieces]
+    orders = [pieces] + [o for row in itertools.zip_longest(*groups) for o in row if o]
+    best = None
+    for order in orders[:max(1, tries)]:
+        bm, shells, nm, missing = union(order)
+        score = (len(missing), nm, shells)
+        if best is None or score < best[0]:
+            if best is not None:
+                best[1].free()
+            best = (score, bm, shells, nm, missing)
+        else:
+            bm.free()
+        if score == (0, 0, 1):
+            break
+    for o in pieces:
+        m = o.data
+        bpy.data.objects.remove(o)
+        bpy.data.meshes.remove(m)
+    _, bm, shells, non_manifold, missing = best
+    missing = [m[:-len(" Export")] for m in missing]
+    if missing or non_manifold or shells != 1:
+        print(f"[!] {os.path.basename(path)}: shells {shells}, non-manifold {non_manifold}, missing {missing}")
     with open(path, "wb") as f:
         f.write(b"\0" * 80 + struct.pack("<I", len(bm.faces)))
         for face in bm.faces:
@@ -446,7 +525,7 @@ def export_stl(gear, path=None, extra=()):
                 f.write(struct.pack("<3f", *v.co))
             f.write(b"\0\0")
     bm.free()
-    return path, shells, non_manifold
+    return path, shells, non_manifold, missing
 
 
 def tooth_phase(ob):

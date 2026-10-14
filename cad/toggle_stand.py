@@ -71,6 +71,7 @@ DRUM_TOP_R = 14.5        # drum band under B / an O (inside B's hub windows and 
 DRUM_B_R = 16.5          # drum body under B (fluted)
 DRUM_O_R = 15.0          # drum body under an O
 DRUM_FLUTES = 12
+BOSS_BORE_R = 11.25      # through each locking boss, so A's / B's top bearing (22 OD) goes in from above
 DRUM_FLUTE_D = 0.8
 # ==== stand ====
 FLOOR_TOP = -62.0        # every turning part ends at z -57 or higher
@@ -330,19 +331,25 @@ def stacks(unit):
     # (the 27T's fill starts 1.5 down, so it fills the rim dots the 27T's top face would hide,
     # and ends 0.3 up into A, clear of the export's squeezed crossings at A's bed face)
     _fill(f"{ga.name} Stack Fill", gi, zi + sot.GEAR_H - 1.5, za + 0.3, out[f"{ga.name} Stack"])
-    _fill(f"{star.name} Stack Fill", star, zs + sot.GEAR_H - 0.3, zo, out[f"{star.name} Stack"])
-    # the top bearing of A and B sits right under the locking boss: clear its seat and inner race
+    # (the star's ends 1 up into the S gear: at its bed face, or 0.3 to 0.5 above it, the union
+    # leaves slivers where it meets the S gear's cut-away sector)
+    _fill(f"{star.name} Stack Fill", star, zs + sot.GEAR_H - 0.3, zo + 1.0, out[f"{star.name} Stack"])
+    # the top bearing of A and B sits right under the locking boss, which prints with the
+    # gear: a bore down through the boss lets the bearing in from the top, and the rod's top
+    # nut down onto its inner race
     for side in "AB":
         bo = O[f"{n['toggle']} Driver {side}"]
         g = O[n[side]]
         zt = g.location.z + sot.GEAR_H / 2
-        for nm, r, z0, z1 in (("Seat", BEARING_R, zt - 1.0, zt), ("Relief", RELIEF_R, zt - 0.1, zt + RELIEF_H)):
-            cname = f"{bo.name} Bearing {nm}"
-            old = O.get(cname)
+        boss_top = max((bo.matrix_world @ Vector(c)).z for c in bo.bound_box)
+        for nm in ("Seat", "Relief", "Bore"):
+            old = O.get(f"{bo.name} Bearing {nm}")
             if old is not None:
                 for m in [m for m in bo.modifiers if getattr(m, "object", None) == old]:
                     bo.modifiers.remove(m)
                 _remove(old)
+        for nm, r, z0, z1 in (("Bore", BOSS_BORE_R, zt - 1.0, boss_top + 1.0),):
+            cname = f"{bo.name} Bearing {nm}"
             cut = _object(cname, _cyl(cname, r, z0, z1), bo.users_collection[0], location=(*g.location.xy, 0.0))
             cut.parent = bo
             cut.matrix_parent_inverse = bo.matrix_world.inverted()
@@ -671,8 +678,10 @@ def stand(unit="NE"):
     # ---- M8 rods and nuts (stand-ins, not printed) ----
     hw = []
     zf = FLOOR_TOP - FLOOR_T - FOOT_H
-    tops = {"P": O[n["P"]].location.z + sot.GEAR_H / 2 - 0.6, "A": O[n["A"]].location.z + sot.GEAR_H / 2 - 0.6,
-            "B": O[n["B"]].location.z + sot.GEAR_H / 2 - 0.6, "O1": O[n["O1"]].location.z + sot.GEAR_H / 2 - 0.6,
+    # A's and B's rods run on up through a cap nut on the top bearing (in the boss's bore)
+    caps = {k: O[n[k]].location.z + sot.GEAR_H / 2 for k in "AB"}
+    tops = {"P": O[n["P"]].location.z + sot.GEAR_H / 2 - 0.6, "A": caps["A"] + NUT_H + 1.0,
+            "B": caps["B"] + NUT_H + 1.0, "O1": O[n["O1"]].location.z + sot.GEAR_H / 2 - 0.6,
             "O2": O[n["O2"]].location.z + sot.GEAR_H / 2 - 0.6, "R": 13.5, "BrE": bz1 + NUT_H + 1.5, "BrW": bz1 + NUT_H + 1.5}
     for nm, ((x, y), _) in sup.items():
         hw.append(_object(f"{pre} Rod {nm}", _cyl("rod", ROD_R, zf + 0.5, tops[nm], 24), col, color=HW_COL, location=(x, y, 0.0)))
@@ -683,6 +692,9 @@ def stand(unit="NE"):
                               location=(x, y, 0.0)))
         else:
             hw.append(_object(f"{pre} Nut {nm} Top", _hex("nut", NUT_AF, nut_tops[nm] - NUT_H, nut_tops[nm]), col, color=HW_COL,
+                              location=(x, y, 0.0)))
+        if nm in caps:
+            hw.append(_object(f"{pre} Nut {nm} Cap", _hex("nut", NUT_AF, caps[nm], caps[nm] + NUT_H), col, color=HW_COL,
                               location=(x, y, 0.0)))
     go = O[n["out"]]
     hw.append(_object(f"{pre} Rod Star", _cyl("rod", ROD_R, bz0 + 0.5, go.location.z + sot.GEAR_H / 2 - 0.6, 24), col,

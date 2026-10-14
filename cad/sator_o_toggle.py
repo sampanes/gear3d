@@ -440,7 +440,8 @@ def build_unit(unit):
     drive = gm.toggle(SWING, C, a_deg=L["a_deg"], b_deg=L["b_deg"], land=LAND, bore_d=2 * BEARING_R,
                       pin_d=PIN_D)
     root, star, drivers, result = gv.build(drive, n["toggle"], location=(*L["star"], Z_STAR_BASE),
-                                           plate_t=0.0, z_gap=STAR_GAP, pin="steel", collection=n["col"])
+                                           plate_t=0.0, z_gap=STAR_GAP, pin="steel", collection=n["col"],
+                                           chamfer=0.3)  # 0.5 folds over itself at the star's points
     star_top = Z_STAR_BASE + STAR_GAP + gv.BUILD_DEFAULTS["thick"]
 
     def spur(key, teeth, xy, z, shift=None, decor=None):

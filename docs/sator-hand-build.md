@@ -137,7 +137,11 @@ per half board turn (see "O toggle units" below).
   and droops without support. (Alternative if supports are a pain: slope the groove ceiling
   at 45 deg, at the cost of groove room at the root.)
 - Make them with `sator_gears.export_stl(gear)` -> `cad/export/<gear name>.stl`. It unions the
-  gear with its crossings into ONE closed solid (and reports shells = 1, non-manifold = 0).
+  gear with its crossings into ONE closed solid (and reports shells = 1, non-manifold = 0,
+  missing = []). The EXACT union depends on merge order: some orders silently drop a piece
+  (the result is still one closed shell; the first P stack export lost its 54T and the first
+  star + S gear export lost its star) or tear the result. So the export checks that points
+  just inside every piece lie inside the solid, and tries other orders until one passes.
 - Never slice a hand export of gear + crossings: those are two shells. The slicer treats each
   shell as a part and gives both perimeters, so the 1 mm overlap prints as a seam of walls
   instead of bonded infill (weak ring where the spokes meet the rim).
@@ -363,11 +367,14 @@ part's swept volume; `export_stand(unit)` writes one STL per part design.
   - Star + S gear: one part, joined by a collar r 14.7 in the 1 mm between them; seats in the
     star's bed face and the S gear's top face. The star's outline runs on up to the S gear
     the same way (the gap only clears the pin and boss tops, which stay outside the star's
-    outline); the star's windows end under it.
+    outline), 1 mm on into the S gear; the star's windows end under it. The star's edge
+    chamfer is 0.3 (`chamfer=0.3` in `build_unit`): at 0.5 it folded over itself at the
+    star's points, and the folded mesh made the union drop the whole star.
   - Each O gear: a drum under it (z -30..-21, r 15) carries the lower bearing.
-  - A's and B's upper bearing sits right under the locking boss: the boss gets a seat
-    clearance and a 16 x 0.6 relief on its underside (hidden cutters `... Bearing Seat`,
-    `... Bearing Relief`).
+  - A's and B's upper bearing sits right under the locking boss, which prints with the
+    gear: a 22.5 bore (`BOSS_BORE_R`, hidden cutter `... Bearing Bore`) runs down through
+    the boss's centre, so the bearing presses in from the top, and a cap nut on the rod
+    sits on its inner race inside the bore (3.7 mm clear of the boss).
 - Supports. All eight lie on the compass lines through the star axis: A and B on the A-B line
   (r 72), the bridge's columns across it (r 87, `BR_D`), P and R on one diagonal, the two O's
   on the other (r 127.3).
@@ -393,11 +400,12 @@ part's swept volume; `export_stand(unit)` writes one STL per part design.
     6.8 deep, open below), four smaller ones near the centre peg in. Every rod runs between
     two nuts (foot trap and support pocket), so the stand can be lifted without the rods,
     feet or tiles dropping out.
-- Hardware for the corner: M8 threaded rod (one 1 m length), cut to P 71, A 35, B 35, each
+- Hardware for the corner: M8 threaded rod (one 1 m length), cut to P 71, A 43, B 43, each
   O 62, R 89, bridge columns 53 (x2), star 25; cut 0 to 1 short, never long (most rod tops end
   0.6 under a turning face). Plain hex nuts (DIN 934 / ISO 4032: 13 across flats, at most 6.8
-  tall; not nyloc or flange) x 15: one in each foot, one on top of P, A, B, O1, O2, R and the
-  star. 2 M8 acorn nuts (DIN 1587) on the bridge ends. 12 x 608 bearings, 2 steel 4 x 25.7
+  tall; not nyloc or flange) x 17: one in each foot, one on top of P, A, B, O1, O2, R and the
+  star, and a cap nut over A's and B's top bearing (snug only: it holds the gear on, and the
+  bearing takes it). 2 M8 acorn nuts (DIN 1587) on the bridge ends. 12 x 608 bearings, 2 steel 4 x 25.7
   drive pins. Stock bolts do not fit: the lengths fall between standard sizes and would leave a
   bearing short of rod or rub a boss. The nuts sit in hex pockets, so they hold the rods in
   place rather than clamp them (spin a foot nut up snug, then back it off to the nearest flat).
