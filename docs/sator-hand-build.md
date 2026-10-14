@@ -40,7 +40,9 @@ per half board turn (see "O toggle units" below).
   teeth interlocked (`mesh_with`). Crossings come from `cad/crossings.py`.
 - Origin = middle gear axis. Bottom tooth layer z -12..-4 (center -8), spacer -4..4, top tooth layer 4..12 (center +8).
 - `Gear_96T` (N) sits at (0, 180, -8) and `Gear_96T_W` at (-180, 0, -8), each rotated
-  -1.875 deg to mesh.
+  -1.875 deg to mesh. `Gear_96T_E` (180, 0, -8) and `Gear_96T_S` (0, -180, -8) are copies of N
+  turned -90 / 180 deg about the middle axis (with their crossings and rim dots), so all four
+  arms of the cross match.
 - 16T idlers (top layer) line up with the 96T contact directions (N/S/E/W).
   `Gear_Idler_16T_N/S/E/W` sit at (0, 90), (0, -90), (90, 0), (-90, 0), z 8, each rotated
   -11.25 deg to mesh; 15.9 bearing hole (bore radius 7.95), solid web (7.1 mm rim to the
@@ -58,8 +60,10 @@ per half board turn (see "O toggle units" below).
   (-180, 0, 8): each concentric with the 96T below it (90 + 90 = 180). 21.9 bearing hole,
   lighter `scurve` x4 crossings so the 96T below shows through.
 - `Gear_Letter_64T_N2` / `_W2` mesh the far side of each 96T (bottom layer) at (0, 360, -8)
-  and (-360, 0, -8), `ringed` x5 crossings (2 steps). Fixed middle -> 96T -> 64T is 64:64 through two
-  meshes, so these letters stay upright like the idler-driven ones.
+  and (-360, 0, -8) (`_E2` / `_S2` at (360, 0, -8) and (0, -360, -8), copied the same way as
+  the 96T E/S, as are the front letters `_E` / `_S` on idlers E/S), `ringed` x5 crossings
+  (2 steps). Fixed middle -> 96T -> 64T is 64:64 through two meshes, so these letters stay
+  upright like the idler-driven ones.
 - Viewport: scene units are mm, so views clip at `clip_end`; set to 20000 (20 m) with
   `clip_start` 0.5 in every workspace. The Shading workspace uses Material Preview (slow);
   work in Layout (Solid).
@@ -320,8 +324,9 @@ reports clearances; `layout()` holds the axis positions.
   and below leaves 8 for the bracket. Changing `STAR_GAP` moves the A/B and input
   layers (and the P stack's 54T) with it; the star and everything above stay put.
 - All meshes checked with a BVH overlap test (clear at the modeled distance, colliding 0.15 mm
-  closer, same as the 96T-letter pairs). The future 96T E and S, placed by meshing the middle
-  gear, also mesh P R2C4 / R4C2 (the loop's tooth phases agree).
+  closer, same as the 96T-letter pairs). 96T E and S, placed by meshing the middle gear, also
+  mesh P R2C4 / R4C2 (the loop's tooth phases agree; checked on the model: clear as placed,
+  colliding 0.15 closer), so each P is driven from two 96T at the same rate.
 - Phase: built at t = 0 (mid-dwell before A's push, star 0); every O rests upright or upside
   down at each board quarter turn.
 
