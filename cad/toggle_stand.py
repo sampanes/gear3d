@@ -273,10 +273,39 @@ def _drum(z_bot, g_bot, body_r, top_r=DRUM_TOP_R):
     return pts
 
 
-def _fill(name, src, z0, z1, target, shrink=0.998):
+def _wall_cutter(name, src, ring_a, ring_b, t, z0, z1):
+    """Straight-walled copy of a window cutter `src` (a carve.cutter_mesh loft: per window its
+    rings bottom to top, the same point count each, a ring per profile step): every ring moved
+    to the outline ring_a + t * (ring_b - ring_a) (ring indices bottom to top), the top ring
+    at world z z1 and the rest 0.01 apart up from z0 (spread evenly, a ring could land in a
+    face plane of a part the fill joins, and the union then leaves slivers). Hidden, not
+    cutting anything yet."""
+    me = src.data.copy()
+    me.name = name
+    mw = src.matrix_world
+    z = [round(v.co.z, 5) for v in me.vertices]
+    rz = sorted(set(z))
+    n_ring = len(rz)
+    seg = next(i for i, zz in enumerate(z) if zz != z[0])  # points per ring
+    if len(z) % (n_ring * seg) or any(z[k * seg] != rz[k] for k in range(n_ring)):
+        raise ValueError(f"{src.name}: not a cutter_mesh loft")
+    ring_a, ring_b = ring_a % n_ring, ring_b % n_ring
+    co = [mw @ v.co for v in me.vertices]
+    for w in range(len(co) // (n_ring * seg)):
+        for i in range(seg):
+            a = co[(w * n_ring + ring_a) * seg + i]
+            b = co[(w * n_ring + ring_b) * seg + i]
+            x, y = a.x + t * (b.x - a.x), a.y + t * (b.y - a.y)
+            for k in range(n_ring):
+                me.vertices[(w * n_ring + k) * seg + i].co = (x, y, z1 if k == n_ring - 1 else z0 + 0.01 * k)
+    return _hidden(_object(name, me, src.users_collection[0]))
+
+
+def _fill(name, src, z0, z1, target, shrink=0.998, cuts=()):
     """src's own outline (its base mesh, before modifiers) stretched to z0..z1 and unioned into
     target. z0 sits inside src; the outline is scaled by `shrink` about src's axis so no wall
-    lies on one of src's (coplanar walls break the union)."""
+    lies on one of src's (coplanar walls break the union). `cuts`: cutters taken out of the
+    fill before the union (each parented to the fill)."""
     me = src.data.copy()
     me.name = name
     mw = src.matrix_world
@@ -289,6 +318,10 @@ def _fill(name, src, z0, z1, target, shrink=0.998):
     ob = _object(name, me, target.users_collection[0])
     ob.parent = target
     ob.matrix_parent_inverse = target.matrix_world.inverted()
+    for c in cuts:
+        c.parent = ob
+        c.matrix_parent_inverse = ob.matrix_world.inverted()
+        _bool(ob, c, "DIFFERENCE")
     _bool(target, ob, "UNION")
     ob.hide_render, ob.display_type = True, "BOUNDS"
     ob.hide_set(True)
@@ -333,7 +366,13 @@ def stacks(unit):
     _fill(f"{ga.name} Stack Fill", gi, zi + sot.GEAR_H - 1.5, za + 0.3, out[f"{ga.name} Stack"])
     # (the star's ends 1 up into the S gear: at its bed face, or 0.3 to 0.5 above it, the union
     # leaves slivers where it meets the S gear's cut-away sector)
-    _fill(f"{star.name} Stack Fill", star, zs + sot.GEAR_H - 0.3, zo + 1.0, out[f"{star.name} Stack"])
+    # Both layers are windowed, so the fill keeps both sets of windows open: the star's at
+    # their rounded top width + 0.05 (the fill's walls stand on the star's flat top), the S
+    # gear's halfway out its bed chamfer (no wall on one of S's)
+    z0, z1 = zs + sot.GEAR_H - 1.0, zo + 2.0
+    cuts = (_wall_cutter(f"{star.name} Stack Fill Star Windows", O[f"{star.name} Windows"], -1, 2, -0.05 / 1.2, z0, z1),
+            _wall_cutter(f"{star.name} Stack Fill S Windows", O[f"{go.name} Sector Cutter"], 0, 2, 0.5, z0, z1))
+    _fill(f"{star.name} Stack Fill", star, zs + sot.GEAR_H - 0.3, zo + 1.0, out[f"{star.name} Stack"], cuts=cuts)
     # the top bearing of A and B sits right under the locking boss, which prints with the
     # gear: a bore down through the boss lets the bearing in from the top, and the rod's top
     # nut down onto its inner race

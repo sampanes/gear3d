@@ -367,7 +367,11 @@ part's swept volume; `export_stand(unit)` writes one STL per part design.
   - Star + S gear: one part, joined by a collar r 14.7 in the 1 mm between them; seats in the
     star's bed face and the S gear's top face. The star's outline runs on up to the S gear
     the same way (the gap only clears the pin and boss tops, which stay outside the star's
-    outline), 1 mm on into the S gear; the star's windows end under it. The star's edge
+    outline), 1 mm on into the S gear, less both parts' windows: the star's windows (at
+    their rounded top width + 0.05) and the S gear's (halfway out its bed chamfer) are cut
+    out of the fill, so both go all the way through (hidden cutters `... Stack Fill Star
+    Windows` and `... Stack Fill S Windows`, straight copies of the parts' own window
+    cutters). The fill joins the two only where both have material. The star's edge
     chamfer is 0.3 (`chamfer=0.3` in `build_unit`): at 0.5 it folded over itself at the
     star's points, and the folded mesh made the union drop the whole star.
   - Each O gear: a drum under it (z -30..-21, r 15) carries the lower bearing.
