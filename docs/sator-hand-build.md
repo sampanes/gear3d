@@ -333,6 +333,14 @@ reports clearances; `layout()` holds the axis positions.
 ## Open questions
 
 - How the fixed middle gear mounts to the frame (no bearing; solid hub drum, r 15, full 24 mm height).
+  Use model: a lazy susan. The middle is fixed to a wall or a base board (the susan's bottom)
+  and the whole board turns around it, pushed by hand at the corners; so every other support
+  (axles, columns, the toggle units' floor) rides on the turning board.
+- OPRO corner as a standalone test (unit NE, no board): a floor in pieces that join (the
+  corner is ~350 x 350, over the 256 bed), fixed axles for the P stack, A + 27T and B,
+  columns under both O gears and the corner R, and a bridge through the star gap (28 wide
+  along the line through the star at right angles to A-B, a post at each end) holding the
+  star + S gear shaft. The input is turned by hand at P.
 - Idler axle support: lives in the spacer layer (z -4..4), outside the middle spacer
   (radius 68.9); the 96T below sweeps under the idler, so nothing can pass through z < -4 there.
 - Letter-gear tree: which letters chain off which (keep paths short, no closed loops)?
