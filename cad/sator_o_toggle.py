@@ -3,6 +3,7 @@
 build_o_toggles() -- both toggle units plus the two P letter gears that drive them
 layout(unit)      -- where every axis of a unit goes (plain math, no Blender needed)
 check(unit)       -- clearance report: letter centers kept clear, no unintended overlaps
+export_p_stack(unit) -- the P gear, its 54T and the tube between them as one STL
 
 One double-Geneva toggle drives two O's. It sits on the corner point between them; the
 P cell next to both O's feeds it. Unit "NE" serves the O's at R1C4 and R2C5 (fed from
@@ -11,7 +12,8 @@ and R4C1, fed from P R4C2), so both units use the same parts.
 
 Train (all module 2.25, the board's gears):
   P 64T letter gear (bottom layer, meshes its 96T, turns -1 x board like every letter)
-  -> 54T on P's shaft -> 27T input on driver A's shaft: A turns 2x per board turn
+  -> 54T on P's shaft (P gear, tube and 54T print as one part) -> 27T input on driver
+     A's shaft: A turns 2x per board turn
   -> A 64T meshes B 64T (counter-rotating twin drivers, 144 apart) -- each carries a pin
   -> the star between them (swing 90, c 72) toggles +90 / -90
   -> 56T on the star's shaft meshes both O 56T gears 1:1: every board quarter turn each
@@ -76,6 +78,40 @@ HUB_R = 19.0       # solid hub around the bore
 RIM_T = 6.0        # arc rim under the tooth roots
 ARM_W = 9.0        # arm width (flares near both ends)
 ARM_SWEEP = 70.0   # deg the arm curls between rim and hub
+# P stack: the P letter gear, the 54T under it and a tube between them print as ONE part
+# (supports under the P gear). A 22 mm bearing (608: 8 x 22 x 7) presses into each outer
+# face; the threaded rod runs through the tube. The tube clears driver A's tooth tips, which
+# pass 16.9 from P's axis.
+BEARING_W = 7.0     # bearing seat depth in each outer face
+ROD_HOLE_D = 8.6    # M8 threaded rod clearance
+RELIEF_D = 16.0     # shallow counterbore under each seat: the shoulder misses the inner race
+RELIEF_H = 0.6
+TUBE_EMBED = 1.5    # how far the tube wall reaches into the 54T's hub beside the seat
+# the tube is a little carved column: capital (abacus band + echinus cushion, never steeper
+# than 50 deg so it prints unsupported) under the P gear, a bead at the neck, a fluted shaft
+# that narrows toward its middle, an Attic base (torus, scotia, torus) standing on the 54T
+TUBE_R = 14.5       # widest point in driver A's height band (the lower torus): 2.4 from A's tips
+CAP_R = 20.5        # abacus, reaching up into the P gear's hub (r 22)
+SHAFT_R = 12.5      # shaft radius at its ends
+WAIST_R = 11.0      # ... at mid-height
+FLUTES = 12
+FLUTE_D = 1.1       # groove depth (fillets between the grooves stay at the shaft radius)
+FLUTE_FILL = 0.75   # share of each flute pitch that is groove
+LEAF_D = 1.2        # depth of the flutes carried up the echinus (they widen with it, like leaves)
+# crossings (cad/crossings.py) for the unit's gears: (style, count, settings). The P letter
+# gear is mostly window (it sits on top of its stack, over the 54T) with a big hub for the
+# column's capital; the 54T under it carries the far letters' ringed x5. The O gears sit on top
+# of the unit (1 step, round windows under the O's); the A/B drivers carry the locking boss on
+# a solid hub (r 43 > boss 40.4, full height so the boss sits flat) and a spoke turned onto the
+# steel pin. The 27T has no room inside its roots for crossings and gets rim dots only.
+DECOR = {
+    "P": ("scurve", 4, dict(SPOKE_W=6.0, LAYERS=1, BASE_T=3.5, STEP_T=2.0, STEP_INSET=1.25,
+                            RIM_TEETH=64, HUB_MIN_R=22.0)),
+    "O": ("holes", 6, dict(SPOKE_W=6.0, LAYERS=1, BASE_T=3.5, STEP_T=2.0, STEP_INSET=1.25, RIM_TEETH=OUT_T)),
+    "p54": ("ringed", 5, dict(SPOKE_W=7.0, LAYERS=2, BASE_T=3.0, STEP_T=1.75, STEP_INSET=1.0,
+                              RIM_TEETH=P_GEAR_T, HUB_MIN_R=18.0)),
+    "driver": ("straight", 8, dict(SPOKE_W=9.0, HUB_MIN_R=43.0)),
+}
 
 
 def cell_xy(row, col):
@@ -177,6 +213,97 @@ def _cylinder(name, r, z0, z1, n=48):
     return me
 
 
+def _flute(a):
+    """0..1 groove depth at angle a: round-bottomed grooves with flat fillets between."""
+    u = (a * FLUTES / (2 * math.pi)) % 1.0
+    v = (u - 0.5) / (FLUTE_FILL / 2)
+    return (1 - v * v) ** 0.6 if abs(v) < 1 else 0.0
+
+
+def _revolve(name, profile, n=96):
+    """Closed mesh from turning an (r, z) loop (r > 0) once around the z axis. A point given
+    as (r, z, w) is fluted: its radius drops by w * _flute(angle)."""
+    me = bpy.data.meshes.new(name)
+    bm = bmesh.new()
+    angles = [2 * math.pi * i / n for i in range(n)]
+    rings = []
+    for p in profile:
+        r, z, w = p if len(p) == 3 else (*p, 0.0)
+        rings.append([bm.verts.new(((r - w * _flute(a)) * math.cos(a), (r - w * _flute(a)) * math.sin(a), z))
+                      for a in angles])
+    for a, b in zip(rings, rings[1:] + rings[:1]):
+        for i in range(n):
+            j = (i + 1) % n
+            bm.faces.new((a[i], a[j], b[j], b[i]))
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
+    bm.to_mesh(me)
+    bm.free()
+    return me
+
+
+def _arc(cr, cz, rad, a0, a1, n=8):
+    """(r, z) points on a circle in the profile plane, a0 -> a1 degrees (0 = outward)."""
+    return [(cr + rad * math.cos(math.radians(a0 + (a1 - a0) * i / n)),
+             cz + rad * math.sin(math.radians(a0 + (a1 - a0) * i / n))) for i in range(n + 1)]
+
+
+def _column(z_top, z_bot):
+    """Outer (r, z[, flute w]) profile of the column, top (under the P gear) to bottom (on the
+    54T): abacus, echinus, neck bead, fluted shaft, Attic base."""
+    pts = [(CAP_R, z_top - 1.0)]                       # abacus band
+    neck = SHAFT_R + 0.5
+    h = CAP_R - neck                                   # echinus: 45 deg on average
+    for i in range(1, 25):                             # convex cushion, 39 deg at top, 50 at foot,
+        s = 1 - i / 24                                 # the flutes carried up it as leaves
+        pts.append((neck + h * (1.19 * s - 0.19 * s * s), z_top - 1.0 - h * (1 - s),
+                    LEAF_D * max(0.0, math.sin(math.pi * min(1.0, s / 0.85))) ** 0.7))
+    z = z_top - 1.0 - h
+    pts.append((neck, z - 0.3))
+    pts += _arc(neck, z - 1.1, 0.8, 90, -90)[1:]       # astragal bead
+    s_top, s_bot = z - 2.4, z_bot + 5.1                # shaft ends (chamfer above, base below)
+    end = 1.2                                          # flutes end in a round, this long
+    n = max(8, int((s_top - s_bot) / 0.25))
+    for i in range(n + 1):
+        zz = s_top - (s_top - s_bot) * i / n
+        r = SHAFT_R - (SHAFT_R - WAIST_R) * math.sin(math.pi * i / n) ** 2
+        d = min(zz - (s_bot + 0.6), (s_top - 0.6) - zz)  # distance inside the fluted length
+        w = FLUTE_D * math.sqrt(max(0.0, 1 - max(0.0, (end - d) / end) ** 2)) if d > 0 else 0.0
+        pts.append((r, zz, w))
+    pts += _arc(SHAFT_R, s_bot - 0.6, 0.6, 90, -90)[1:]  # upper torus
+    pts += [(SHAFT_R - 0.3, s_bot - 1.5), (SHAFT_R - 0.45, s_bot - 1.85),  # scotia
+            (SHAFT_R - 0.3, s_bot - 2.2), (SHAFT_R + 0.1, s_bot - 2.45)]
+    pts += _arc(TUBE_R - 1.2, z_bot + 1.3, 1.2, 120, -45)[1:]  # lower torus, widest TUBE_R
+    return pts
+
+
+def _p_tube(p_gear, g54):
+    """Column joining the P letter gear to the 54T under it (one printed part).
+
+    Each gear's crossings keep their 21.9 bearing hole; the column plugs it below the outer
+    BEARING_W, so the bearing sits on the column's end (a RELIEF_D counterbore keeps the inner
+    race clear) and the rod runs through ROD_HOLE_D. The capital spreads into P's hub; the
+    base stays within TUBE_R, since driver A turns just above the 54T."""
+    p_top, p_bot = p_gear.location.z + GEAR_H / 2, p_gear.location.z - GEAR_H / 2
+    g_top = g54.location.z + GEAR_H / 2
+    f_top = p_top - BEARING_W           # top seat floor
+    f_bot = g54.location.z - GEAR_H / 2 + BEARING_W  # bottom seat floor
+    seat, relief, rod = BEARING_R + 0.3, RELIEF_D / 2, ROD_HOLE_D / 2
+    col = _column(p_bot, g_top)
+    foot = col[-1][0]
+    prof = ([(relief, f_top), (CAP_R, f_top)] + col
+            + [(foot, f_bot - TUBE_EMBED), (seat, f_bot - TUBE_EMBED), (seat, f_bot), (relief, f_bot),
+               (relief, f_bot + RELIEF_H), (rod, f_bot + RELIEF_H), (rod, f_top - RELIEF_H),
+               (relief, f_top - RELIEF_H)])
+    z0 = p_gear.location.z
+    name = f"{p_gear.name} Tube"
+    tube = bpy.data.objects.new(name, _revolve(name, [(p[0], p[1] - z0, *p[2:]) for p in prof],
+                                               n=FLUTES * 24))
+    for c in p_gear.users_collection:
+        c.objects.link(tube)
+    tube.parent = p_gear  # same axis and z origin as the gear
+    return tube
+
+
 def _steel_pin(gear, drive, d, star_xy, star_top, name):
     """Press-fit hole through a driver gear at the pin position (t = 0), plus a steel pin
     stand-in (reference only, not exported) from the gear bottom to just under the star top."""
@@ -191,7 +318,11 @@ def _steel_pin(gear, drive, d, star_xy, star_top, name):
     cut.location = (dx * math.cos(rz) + dy * math.sin(rz), -dx * math.sin(rz) + dy * math.cos(rz), 0.0)
     cut.display_type, cut.hide_render = "WIRE", True
     cut.hide_set(True)
-    mod = gear.modifiers.new("Pin Hole", "BOOLEAN")
+    # the pin sits inside the bore of a gear with crossings: turn a spoke onto it, cut it there
+    target = bpy.data.objects.get(f"{gear.name} Crossings") or gear
+    if target is not gear:
+        target.rotation_euler.z = math.atan2(cut.location.y, cut.location.x)
+    mod = target.modifiers.new("Pin Hole", "BOOLEAN")
     mod.operation, mod.solver, mod.object = "DIFFERENCE", "EXACT", cut
     pin = bpy.data.objects.new(name, _cylinder(name, PIN_D / 2, z0, star_top - PIN_TOP_GAP))
     for c in gear.users_collection:
@@ -308,9 +439,16 @@ def build_unit(unit):
             _remove(bpy.data.objects[name])
     template = bpy.data.objects[TEMPLATE]
 
-    # P letter gear: a far-letter clone meshing its 96T (bottom layer)
+    def decorate(g, decor):
+        style, count, settings = DECOR[decor]
+        bpy.context.view_layer.update()
+        _load("crossings").build(g, style, count, BEARING_HOLE_D=2 * BEARING_R, **settings)
+        sg.add_rim_dots(g)
+
+    # P letter gear: a far-letter clone meshing its 96T (bottom layer), re-decorated
     p_gear = _clone_gear(template, n["P"])
     sg.mesh_with(bpy.data.objects[u["big"]], p_gear, u["big_dir"], -8.0)
+    decorate(p_gear, "P")
 
     # the toggle: star + the two drivers' locking bosses and pins (standing on the A/B gears)
     drive = gm.toggle(SWING, C, a_deg=L["a_deg"], b_deg=L["b_deg"], land=LAND, bore_d=2 * BEARING_R,
@@ -319,48 +457,76 @@ def build_unit(unit):
                                            plate_t=0.0, pin="steel", collection=n["col"])
     star_top = Z_STAR_BASE + gv.BUILD_DEFAULTS["z_gap"] + gv.BUILD_DEFAULTS["thick"]
 
-    def spur(key, teeth, xy, z, shift=None):
-        g = sg.new_spur(n[key], teeth, GEAR_H, template, n["col"], bore_r=BEARING_R, shift=shift)
+    def spur(key, teeth, xy, z, shift=None, decor=None):
+        # decorated gears open the bore to the rim (sator_gears.RIM) and fill it with crossings
+        g = sg.new_spur(n[key], teeth, GEAR_H, template, n["col"], bore_r=None if decor else BEARING_R,
+                        shift=shift)
         g.location = (*xy, z)
         return g
 
-    ga = spur("A", DRIVER_T, L["A"], Z_DRIVER)
-    gb = spur("B", DRIVER_T, L["B"], Z_DRIVER)
+    ga = spur("A", DRIVER_T, L["A"], Z_DRIVER, decor="driver")
+    gb = spur("B", DRIVER_T, L["B"], Z_DRIVER, decor="driver")
     sg.mesh_with(ga, gb, L["b_deg"], Z_DRIVER)
+    decorate(ga, "driver")
+    decorate(gb, "driver")
     for g, d, side in ((ga, drive.drivers[0], "A"), (gb, drive.drivers[1], "B")):
         _steel_pin(g, drive, d, L["star"], star_top, f"{n['col']} Pin {side}")
 
+    # the 54T is printed with the P gear, so it keeps P's angle (both units then print the same
+    # stack); the 27T turns to mesh it
+    g54 = spur("p54", P_GEAR_T, L["P"], Z_INPUT, decor="p54")
+    g54.rotation_euler.z = p_gear.rotation_euler.z
     gi = spur("input", INPUT_T, L["A"], Z_INPUT)
-    g54 = spur("p54", P_GEAR_T, L["P"], Z_INPUT)
-    sg.mesh_with(gi, g54, math.degrees(math.atan2(L["P"][1] - L["A"][1], L["P"][0] - L["A"][0])), Z_INPUT)
+    bpy.context.view_layer.update()
+    sg.mesh_with(g54, gi, math.degrees(math.atan2(L["A"][1] - L["P"][1], L["A"][0] - L["P"][0])), Z_INPUT)
+    decorate(g54, "p54")
+    _p_tube(p_gear, g54)
+    sg.add_rim_dots(gi)
 
     go = spur("out", OUT_T, L["star"], Z_OUT, shift=OUT_SHIFT)
     for key in ("O1", "O2"):
-        g = spur(key, OUT_T, L[key], Z_OUT, shift=OUT_SHIFT)
+        g = spur(key, OUT_T, L[key], Z_OUT, shift=OUT_SHIFT, decor="O")
         sg.mesh_with(go, g, math.degrees(math.atan2(L[key][1] - L["star"][1], L[key][0] - L["star"][0])), Z_OUT)
         g.location = (*L[key], Z_OUT)  # mesh_with spaces by pitch radii; the shift makes it OUT_CENTER
+        decorate(g, "O")
     result["sectors"] = _sector_cut(go, [math.atan2(L[k][1] - L["star"][1], L[k][0] - L["star"][0])
                                          for k in ("O1", "O2")])
     return result
 
 
+def _band_r(edges, lo, hi):
+    """Largest distance from the axis of the edges [((r, z), (r, z)), ...] within lo <= z <= hi
+    (r taken linear along each edge, exact for walls parallel to the axis)."""
+    best = 0.0
+    for (ra, za), (rb, zb) in edges:
+        if max(za, zb) < lo or min(za, zb) > hi:
+            continue
+        if abs(zb - za) < 1e-9:
+            best = max(best, ra, rb)
+            continue
+        for z in (max(lo, min(za, zb)), min(hi, max(za, zb))):
+            best = max(best, ra + (rb - ra) * (z - za) / (zb - za))
+    return best
+
+
 def _footprints(unit):
-    """(name, axis xy, radius, z0, z1) for every part of a unit plus its P gear chain."""
-    n, L = _names(unit), layout(unit)
+    """(name, axis xy, radius, z0, z1, edges as ((r, z), (r, z))) for every part of a unit
+    plus its P gear chain."""
+    n = _names(unit)
     dg = bpy.context.evaluated_depsgraph_get()
     out = []
-    names = [n[k] for k in ("A", "B", "input", "p54", "out", "O1", "O2", "P")]
+    names = [n[k] for k in ("A", "B", "input", "p54", "out", "O1", "O2", "P")] + [f"{n['P']} Tube"]
     names += [o.name for o in bpy.data.objects[n["toggle"]].children]
     for name in names:
         ob = bpy.data.objects[name]
         me = ob.evaluated_get(dg).to_mesh()
         mw = ob.matrix_world
         ax = mw.translation
-        pts = [mw @ v.co for v in me.vertices]
-        r = max(math.hypot(p.x - ax.x, p.y - ax.y) for p in pts)
-        z0, z1 = min(p.z for p in pts), max(p.z for p in pts)
+        rz = [(math.hypot(p.x - ax.x, p.y - ax.y), p.z) for p in (mw @ v.co for v in me.vertices)]
+        edges = [(rz[e.vertices[0]], rz[e.vertices[1]]) for e in me.edges]
         ob.evaluated_get(dg).to_mesh_clear()
-        out.append((name, (ax.x, ax.y), r, z0, z1))
+        out.append((name, (ax.x, ax.y), max(r for r, _ in rz), min(z for _, z in rz),
+                    max(z for _, z in rz), edges))
     return out
 
 
@@ -371,23 +537,38 @@ def check(unit):
     centers = [cell_xy(r, c) for r in range(1, 6) for c in range(1, 6)]
     parts = _footprints(unit)
     report = {"letter_gap": {}, "overlaps": []}
-    for name, (x, y), r, z0, z1 in parts:
+    for name, (x, y), r, z0, z1, _ in parts:
         gaps = [math.hypot(cx - x, cy - y) - r for cx, cy in centers if math.hypot(cx - x, cy - y) > 1.0]
         report["letter_gap"][name] = round(min(gaps), 2)
+    tube = f"{n['P']} Tube"
     meshing = {frozenset(p) for p in ((n["A"], n["B"]), (n["input"], n["p54"]), (n["out"], n["O1"]),
-                                      (n["out"], n["O2"]))}
+                                      (n["out"], n["O2"]), (tube, n["P"]), (tube, n["p54"]))}
     toggle = {o.name for o in bpy.data.objects[n["toggle"]].children}
-    for i, (na, pa, ra, a0, a1) in enumerate(parts):
-        for nb, pb, rb, b0, b1 in parts[i + 1:]:
-            if min(a1, b1) - max(a0, b0) <= 0.01:
+    for i, (na, pa, ra, a0, a1, rza) in enumerate(parts):
+        for nb, pb, rb, b0, b1, rzb in parts[i + 1:]:
+            lo, hi = max(a0, b0), min(a1, b1)
+            if hi - lo <= 0.01:
                 continue
             if frozenset((na, nb)) in meshing or (na in toggle and nb in toggle):
                 continue
-            gap = math.hypot(pa[0] - pb[0], pa[1] - pb[1]) - ra - rb
+            # radii only over the shared height band (the tube is wide only above driver A)
+            gap = math.hypot(pa[0] - pb[0], pa[1] - pb[1]) - _band_r(rza, lo, hi) - _band_r(rzb, lo, hi)
             if gap < 1.0:
                 report["overlaps"].append((na, nb, round(gap, 2)))
+            elif tube in (na, nb):
+                report.setdefault("tube_gaps", {})[nb if na == tube else na] = round(gap, 2)
     report["min_letter_gap"] = min(report["letter_gap"].values())
     return report
+
+
+def export_p_stack(unit, path=None):
+    """P letter gear + tube + 54T as ONE solid (gear-local, P's axis at the origin)."""
+    n = _names(unit)
+    p = bpy.data.objects[n["P"]]
+    if path is None:
+        path = os.path.join(_HERE, "export", f"Gear_P_Stack_{unit}.stl")
+    return _load("sator_gears").export_stl(p, path, extra=(bpy.data.objects[f"{n['P']} Tube"],
+                                                         bpy.data.objects[n["p54"]]))
 
 
 def build_o_toggles(save=False):

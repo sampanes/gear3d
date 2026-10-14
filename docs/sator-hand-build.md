@@ -13,9 +13,9 @@ publish exported STLs/renders instead.
 | Letter gears | 64 | 24 | free on board | equal to middle, so middle -> idler -> letter is 1:1 (upright) |
 | Idlers | 16 | as needed | free on board | count is free: only sets spacing and direction, not ratio |
 | Big gears | 96 | 4 | free on board, N/S/E/W of middle, rear layer | planet on fixed 64T: turns -2/3 of board angle relative to board |
-| P letter gears (R2C4, R4C2) | 64 | 2 | free on board, bottom layer | far-letter clones; each also feeds an O toggle unit (below) |
+| P letter gears (R2C4, R4C2) | 64 | 2 | bottom layer; printed with their 54T as one P stack on 608 bearings | far-letter clones, re-decorated `scurve` x4; each also feeds an O toggle unit (below) |
 | O toggle drivers A/B | 64 | 4 | free on board, below the board | twin drivers of the double-Geneva toggle, mesh each other; 2 turns per board turn |
-| O toggle input / P shaft | 27 / 54 | 2 / 2 | 27T on driver A's shaft, 54T on P's shaft | P turns 1 per board turn, x2 |
+| O toggle input / P shaft | 27 / 54 | 2 / 2 | 27T on driver A's shaft, 54T printed with P (P stack) | P turns 1 per board turn, x2 |
 | O output | 56 (shift +0.29) | 6 | star shaft + both O's of a unit | star -> O is 1:1, so each push turns the O a quarter |
 
 Ratio check: P letter -1, x (54/27) = 2 driver turns per board turn, one toggle push and return
@@ -162,7 +162,9 @@ to 0.2 over the guess in 0.1 steps, each size engraved beside its hole. The hole
 like the gears' (fine polygon, straight wall, no chamfer), so the winning size carries over:
 set `BEARING_HOLE_D` / the idler bore radius to it, rebuild and re-export.
 
-Bearing model numbers and widths: TBD (width matters vs 8 mm gear thickness).
+Bearing model numbers and widths: TBD (width matters vs 8 mm gear thickness). The P stacks
+assume 608 (8 x 22 x 7, M8 rod); change `BEARING_W` / `ROD_HOLE_D` in `cad/sator_o_toggle.py`
+and rebuild if the bearings on hand differ.
 
 ## Derived dimensions (module 2.25, spur, shift 0, clearance 0.25)
 
@@ -226,8 +228,8 @@ reports clearances; `layout()` holds the axis positions.
 
 - Unit NE: star axis on the corner point (270, 270) between the O's at R1C4 and R2C5, fed
   from P R2C4. Unit SW is its half turn (O's R5C2 + R4C1, fed from P R4C2): same parts.
-- Train: P 64T (bottom layer, meshes its 96T) -> 54T on P's shaft -> 27T on driver A's shaft
-  (A at 2 turns per board turn) -> A 64T meshes B 64T at the star axis (they counter-rotate; each
+- Train: P 64T (bottom layer, meshes its 96T) -> 54T on P's shaft (the P stack, below) ->
+  27T on driver A's shaft (A at 2 turns per board turn) -> A 64T meshes B 64T at the star axis (they counter-rotate; each
   carries a pin and locking boss) -> star -> 56T on the star shaft meshes both O 56T gears 1:1.
 - Toggle: `toggle(90, 72, land=7.8, bore_d=21.9)`: star R 50.9 (102 mm across), crank 50.9,
   pin 4, lock play 3.65 / 0.5 deg (same as the printed rig).
@@ -251,6 +253,34 @@ reports clearances; `layout()` holds the axis positions.
   hub (r 19), one set 1.5 in from each arc end so both ends are supported; arc rim 6 below the
   tooth roots. Cut by a hidden `Sector Cutter` Boolean, so the teeth are the
   same as the full gear's; `SECTOR_MARGIN = 1` would give 17 teeth / 109 deg.
+- Decoration (`DECOR`, built by `build_unit` with `cad/crossings.py`, 21.9 bearing hole, rim
+  dots on every gear): P 64T `scurve` x4, 1 step, hub r 22 (mostly window: it tops its stack;
+  `straight` x4 at `SPOKE_W=5` was the alternative); 54T under it `ringed` x5, 2 steps, hub
+  r 18 (P's old far-letter look); O 56T `holes` x6, 1 step (round windows under the O's; they
+  top the unit); A/B 64T
+  `straight` x8, flat full height, solid hub r 43 (the locking boss, r 40.4, sits on it), one
+  spoke turned onto the steel pin, whose hole is cut in the crossings (the pin is inside the
+  opened bore); 27T rim dots only (no room inside its roots). Every gear + crossings exports
+  as one closed solid (`export_stl`: shells 1, non-manifold 0).
+- P stack: the P 64T (z -12..-4), the 54T (-48..-40) and a tube between them print as ONE part
+  (`export_p_stack(unit)` -> `cad/export/Gear_P_Stack_<unit>.stl`; NE and SW are byte-identical,
+  so print one design twice). It turns on two 22 mm bearings (608, 8 x 22 x 7, `BEARING_W`) on a
+  fixed M8 threaded rod: each gear keeps its 21.9 bearing hole and the tube plugs it 7 below the
+  outer face, so each bearing seats 7 deep, on the tube's end. A 16 x 0.6 counterbore
+  (`RELIEF_D`) under each seat keeps the shoulder off the inner race; the rod hole is 8.6
+  (`ROD_HOLE_D`). The tube is a small carved column (`_column`), top down: abacus band r 20.5
+  (`CAP_R`, into P's r 22 hub), echinus cushion down to the neck (39 deg at the top, 50 at the
+  foot, so it prints unsupported) with the flutes carried up it as leaves (`LEAF_D` 1.2), an
+  astragal bead, a shaft narrowing from r 12.5 (`SHAFT_R`) to r 11 (`WAIST_R`) at mid-height
+  with 12 round-ended flutes 1.1 deep (`FLUTES`, `FLUTE_D`, fillets between), then an Attic
+  base (torus, scotia, torus) on the 54T. Thinnest wall to the rod hole: 5.6 (flute bottom at
+  the waist). The base's lower torus is the widest point in driver A's height band, r 14.5
+  (`TUBE_R`): A's tooth tips pass 2.4 from it (they reach 16.9 from P's axis); A turns 1 mm
+  above the 54T, so the base cannot spread wider. The 54T keeps P's angle (the stack is built
+  that way in both units) and the 27T turns to mesh it. Print it 54T down with supports under
+  the P gear (28 mm of air under a 74 mm radius wheel); the column needs none.
+  `check()` measures each part's radius only over the height band it shares with another, so
+  the capital is not counted against A.
 - The unit hangs below the board; the board's layers are unchanged. Top down: 56T output
   gears z -21..-13, star -30..-22 (bosses and pins stand on the A/B gears), A/B 64T -39..-31,
   27T + 54T -48..-40. The O letters reach the letter plane on their own shafts.
@@ -271,5 +301,6 @@ reports clearances; `layout()` holds the axis positions.
   bearing, own layer) meshing P 64T and R 64T: 49T at module 2.25 spans 127.125 of the needed
   127.28 (0.16 mm loose) -- or shift it like the 56T. R then turns with P (upright).
 - O toggle hardware: shafts and supports for the hanging unit (star + 56T on one shaft, A +
-  27T, B, P + 54T); union each driver's locking boss onto its 64T for export (A and B
-  differ: the pin hole sits at a different tooth phase on each).
+  27T, B; the P stack is settled: 608 bearings on a fixed M8 rod, which still needs its own
+  mounts); union each driver's locking boss onto its 64T for export (A and B differ: the pin
+  hole sits at a different tooth phase on each).

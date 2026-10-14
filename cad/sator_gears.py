@@ -360,12 +360,14 @@ def fit_coupon(name, sizes, wall=3.0, thick=5.0, label_h=4.0, location=(0, 0, 0)
     return ob
 
 
-def export_stl(gear, path=None):
+def export_stl(gear, path=None, extra=()):
     """Union a gear with its crossings into ONE solid and write a binary STL.
 
     Exporting the gear and crossings as separate shells makes the slicer treat them
     as separate parts: each gets its own perimeters and the overlap becomes a seam of
     walls instead of continuous infill. The union removes that seam.
+    `extra`: more objects printed as part of the same piece (another gear on the same
+    shaft, a tube joining them); each comes with its own crossings.
     Coordinates are gear-local (axis at the origin). Returns (path, shells, non_manifold).
     """
     import os
@@ -384,7 +386,14 @@ def export_stl(gear, path=None):
     # crossings copy 0.01 mm in from top and bottom (far below a print layer) so no face
     # is near-coplanar.
     copies = []
-    for c in gear.children:
+    for e in extra:
+        ec = bpy.data.objects.new(e.name + " Export", bpy.data.meshes.new_from_object(e.evaluated_get(dg)))
+        bpy.context.scene.collection.objects.link(ec)
+        ec.matrix_world = e.matrix_world
+        copies.append(ec)
+        mod = tmp.modifiers.new("Union " + e.name, "BOOLEAN")
+        mod.operation, mod.solver, mod.object = "UNION", "EXACT", ec
+    for c in [c for p in (gear, *extra) for c in p.children]:
         if c.type == "MESH" and c.name.endswith(" Crossings"):
             cme = bpy.data.meshes.new_from_object(c.evaluated_get(dg))
             z0 = min(v.co.z for v in cme.vertices)
