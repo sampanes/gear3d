@@ -13,17 +13,19 @@ export_stand(unit) -- the stand's printed parts as STLs
 Every turning group runs on two 608 bearings (8 x 22 x 7) on a fixed M8 threaded rod, one
 bearing pressed into each outer face of the group (the 21.9 holes the gears already have).
 A plug between the two seats carries each bearing's outer race; a counterbore keeps the inner
-race clear. Each inner race rests on a spacer ring at the top of whatever holds the rod.
+race clear. Each inner race rests on a hex nut sunk in a pocket at the top of whatever holds
+the rod, standing 1 proud as the spacer (it touches only the inner race and the seal).
 
-Every fixed part hangs off the floor: the rods stand in nut traps in the floor's feet (and
-the star's in a trap in the bridge). The supports all lie on the eight compass lines through
-the star axis: A and B on the A-B line, the bridge's columns across it, P and R on one
-diagonal, the O's on the other. So the floor is a compass rose: spokes along those lines,
+Every fixed part hangs off the floor: each rod runs from a nut in a trap under its foot up
+through a nut in a pocket at the top of its support, so foot, tile and support stay on the
+rod when the stand is lifted; the star's rod hangs from its nut in the bridge's top. The
+supports all lie on the eight compass lines through the star axis: A and B on the A-B line,
+the bridge's columns across it, P and R on one diagonal, the O's on the other. So the floor is a compass rose: spokes along those lines,
 two rings through the supports, a rim; four quadrant tiles meeting under the star (seams
 between the spokes), a keystone over the meeting point, bow-tie keys across the seams.
 
 Style: Roman (Attic bases, fluted shafts, echinus capitals, a lintel) with steampunk touches
-(rivets, the open grate floor, bow-tie keys, nuts left showing on the bridge).
+(rivets, the open grate floor, bow-tie keys, acorn nuts left showing on the bridge).
 """
 
 import importlib.util
@@ -57,12 +59,12 @@ RELIEF_H = 0.6
 ROD_HOLE_R = sot.ROD_HOLE_D / 2  # turning parts: clearance round the rod
 ROD_FIT_R = 4.15         # fixed parts: snug on the rod
 ROD_R = 4.0
-SPACER_R = 5.5           # spacer ring under each inner race (inner ring only)
-SPACER_H = 1.0
+SPACER_H = 1.0           # a nut stands this far proud of each support, under the inner race
 NUT_AF = 13.0            # M8 nut across flats / height
 NUT_H = 6.5
 TRAP_AF = NUT_AF + 0.3
 TRAP_H = NUT_H + 0.3
+ACORN_H = 15.0           # M8 acorn (dome) nut on top of each bridge end (DIN 1587)
 # ==== stacks ====
 COLLAR_R = 14.7          # joins A to its 27T and the star to its S gear (A's hub windows start at 15.2)
 DRUM_TOP_R = 14.5        # drum band under B / an O (inside B's hub windows and the O's hub)
@@ -346,15 +348,19 @@ def _pedestal_prof():
     pts += _arc(PED_R - 1.3, FLOOR_TOP + 2.2, 1.2, -90, 90)[1:]
     pts += [(PED_R - 2.7, FLOOR_TOP + 2.6), (PED_R - 3.0, FLOOR_TOP + 3.0)]
     pts += _arc(PED_R - 3.6, FLOOR_TOP + 3.5, 0.5, -90, 90)[1:]
-    pts += [(PED_R - 4.5, PED_TOP), (SPACER_R, PED_TOP), (SPACER_R, PED_TOP + SPACER_H), (ROD_FIT_R, PED_TOP + SPACER_H)]
+    pts += [(PED_R - 4.5, PED_TOP), (ROD_FIT_R, PED_TOP)]
     return pts
+
+
+def _nut_pocket(name, col, x, y, nut_top):
+    """Hex pocket open at the top: a nut dropped in stands with its top face at nut_top."""
+    return _object(name, _hex("nut pocket", TRAP_AF, nut_top - NUT_H, nut_top + 2.0), col, location=(x, y, 0.0))
 
 
 def _column_prof(z0, z1, base_r, shaft_r, cap_r, top):
     """Attic base on the floor (z0) with a spigot under it, fluted shaft with a little entasis,
-    bead, echinus (<= 50 deg, prints unsupported) and abacus up to z1. top: "spacer" (a ring
-    for a bearing's inner race), "embed" (runs 0.5 on into the part above), "spigot" (plugs
-    into the part above), "flat"."""
+    bead, echinus (<= 50 deg, prints unsupported) and abacus up to z1. top: "embed" (runs
+    0.5 on into the part above), "spigot" (plugs into the part above), "flat"."""
     pts = [(ROD_FIT_R, z0 - SPIGOT_H), (SPIGOT_R, z0 - SPIGOT_H), (SPIGOT_R, z0), (base_r, z0), (base_r, z0 + 1.2)]
     pts += _arc(base_r - 1.4, z0 + 2.4, 1.2, -90, 90)[1:]               # lower torus
     pts += [(base_r - 2.8, z0 + 3.9), (base_r - 3.1, z0 + 4.3)]          # scotia
@@ -378,9 +384,7 @@ def _column_prof(z0, z1, base_r, shaft_r, cap_r, top):
         s = i / 16
         pts.append((neck + h * (1.19 * s - 0.19 * s * s), s1 + 1.8 + h * s))
     pts.append((cap_r, z1))                                             # abacus
-    if top == "spacer":
-        pts += [(SPACER_R, z1), (SPACER_R, z1 + SPACER_H), (ROD_FIT_R, z1 + SPACER_H)]
-    elif top == "embed":
+    if top == "embed":
         pts += [(cap_r, z1 + 0.5), (ROD_FIT_R, z1 + 0.5)]
     elif top == "spigot":
         pts += [(SPIGOT_R, z1), (SPIGOT_R, z1 + SPIGOT_H), (ROD_FIT_R, z1 + SPIGOT_H)]
@@ -495,12 +499,13 @@ def stand(unit="NE"):
                                     col, location=(x, y, 0.0)))
             cuts.append(_object(f"{name} Rod Hole {nm}", _cyl("rod hole", ROD_FIT_R, z0 - 1, PED_TOP + SPACER_H + 1, 32),
                                 col, location=(x, y, 0.0)))
+            if kind == "pedestal":
+                cuts.append(_nut_pocket(f"{name} Nut Pocket {nm}", col, x, y, PED_TOP + SPACER_H))
             # a bun foot under it (printed apart, so the tile prints flat) holds the rod's nut
             foot = _object(f"{pre} Foot {nm}", _revolve("foot", _foot_prof(), 64), col, color=SUPPORT_COL, location=(x, y, 0.0))
             trap = _object(f"{pre} Foot {nm} Nut Trap", _hex("nut trap", TRAP_AF, z0 - FOOT_H - 1, z0 - FOOT_H + TRAP_H),
-                           col, location=(x, y, 0.0))
-            trap.parent = foot
-            trap.matrix_parent_inverse = foot.matrix_world.inverted()
+                           col)
+            trap.parent = foot  # in the foot's frame
             _hidden(trap)
             _bool(foot, trap, "DIFFERENCE")
             made[foot.name] = foot
@@ -578,16 +583,24 @@ def stand(unit="NE"):
             rv.hide_set(True)
             made[name] = ob
 
-    # ---- columns: under the O's (a spacer ring for the drum's bearing), the corner R (the
-    # letter sits on it), the bridge's two ----
-    z_o = O[n["O1"]].location.z - sot.GEAR_H / 2 - 9.0 - SPACER_H     # drum bed face - spacer
-    specs = {"O1": (z_o, 12.5, 17.0, "spacer"), "O2": (z_o, 12.5, 17.0, "spacer"),
+    # ---- columns: under the O's (a nut pocket: the nut carries the drum's bearing), the
+    # corner R (the letter sits on it, over its nut), the bridge's two ----
+    z_o = O[n["O1"]].location.z - sot.GEAR_H / 2 - 9.0 - SPACER_H     # drum bed face - 1
+    specs = {"O1": (z_o, 12.5, 17.0, "flat"), "O2": (z_o, 12.5, 17.0, "flat"),
              "R": (14.0, 11.5, 12.0, "flat"), "BrE": (BEAM_Z[0], 12.0, 16.0, "spigot"), "BrW": (BEAM_Z[0], 12.0, 16.0, "spigot")}
+    nut_tops = {"P": PED_TOP + SPACER_H, "A": PED_TOP + SPACER_H, "B": PED_TOP + SPACER_H,
+                "O1": z_o + SPACER_H, "O2": z_o + SPACER_H, "R": 14.0, "Star": BEAM_Z[1] + SPACER_H}
     for nm, (z_top, shaft_r, cap_r, top) in specs.items():
         (x, y), kind = sup[nm]
         name = f"{pre} Column {nm}"
-        made[name] = _object(name, _revolve(name, _column_prof(FLOOR_TOP, z_top, COL_BASE_R, shaft_r, cap_r, top), FLUTES * 24),
-                             col, color=SUPPORT_COL, location=(x, y, 0.0))
+        c = _object(name, _revolve(name, _column_prof(FLOOR_TOP, z_top, COL_BASE_R, shaft_r, cap_r, top), FLUTES * 24),
+                    col, color=SUPPORT_COL, location=(x, y, 0.0))
+        if nm in nut_tops:
+            k = _nut_pocket(f"{name} Nut Pocket", col, 0.0, 0.0, nut_tops[nm])
+            k.parent = c  # in the column's frame
+            _hidden(k)
+            _bool(c, k, "DIFFERENCE")
+        made[name] = c
 
     # ---- bridge beam through the star gap, waisted between the pin posts' sweeps ----
     L = sot.layout(unit)
@@ -613,17 +626,11 @@ def stand(unit="NE"):
         _bool(beam, rv, "UNION")
         rv.hide_render, rv.display_type = True, "BOUNDS"
         rv.hide_set(True)
-    for c in (_object(f"{name} Spacer", _cyl("spacer", SPACER_R, bz1 - 0.3, bz1 + SPACER_H, 32), col, location=(sx, sy, 0.0)),
-              _object(f"{name} Nut Trap", _hex("nut trap", TRAP_AF, bz0 - 1, bz0 + TRAP_H), col, location=(sx, sy, 0.0)),
+    for c in (_nut_pocket(f"{name} Nut Pocket", col, sx, sy, nut_tops["Star"]),
               _object(f"{name} Rod Hole", _cyl("rod hole", ROD_FIT_R, bz0 - 1, bz1 + SPACER_H + 1, 32), col, location=(sx, sy, 0.0))):
         c.parent = beam
-        if c.name.endswith("Spacer"):
-            _bool(beam, c, "UNION")
-            c.hide_render, c.display_type = True, "BOUNDS"
-            c.hide_set(True)
-        else:
-            _hidden(c)
-            _bool(beam, c, "DIFFERENCE")
+        _hidden(c)
+        _bool(beam, c, "DIFFERENCE")
     for nm in ("BrE", "BrW"):  # the end rods pass through
         (x, y), _ = sup[nm]
         c = _object(f"{name} Rod Hole {nm}", _cyl("rod hole", ROD_FIT_R, FLOOR_TOP - SPIGOT_H - 1, bz1 + 2, 32), col, location=(x, y, 0.0))
@@ -637,20 +644,35 @@ def stand(unit="NE"):
     zf = FLOOR_TOP - FLOOR_T - FOOT_H
     tops = {"P": O[n["P"]].location.z + sot.GEAR_H / 2 - 0.6, "A": O[n["A"]].location.z + sot.GEAR_H / 2 - 0.6,
             "B": O[n["B"]].location.z + sot.GEAR_H / 2 - 0.6, "O1": O[n["O1"]].location.z + sot.GEAR_H / 2 - 0.6,
-            "O2": O[n["O2"]].location.z + sot.GEAR_H / 2 - 0.6, "R": 10.0, "BrE": bz1 + NUT_H + 1.5, "BrW": bz1 + NUT_H + 1.5}
+            "O2": O[n["O2"]].location.z + sot.GEAR_H / 2 - 0.6, "R": 13.5, "BrE": bz1 + NUT_H + 1.5, "BrW": bz1 + NUT_H + 1.5}
     for nm, ((x, y), _) in sup.items():
         hw.append(_object(f"{pre} Rod {nm}", _cyl("rod", ROD_R, zf + 0.5, tops[nm], 24), col, color=HW_COL, location=(x, y, 0.0)))
-        hw.append(_object(f"{pre} Nut {nm}", _hex("nut", NUT_AF, zf + 0.5, zf + 0.5 + NUT_H), col, color=HW_COL, location=(x, y, 0.0)))
+        hw.append(_object(f"{pre} Nut {nm}", _hex("nut", NUT_AF, zf + TRAP_H - NUT_H, zf + TRAP_H), col, color=HW_COL,
+                          location=(x, y, 0.0)))
         if nm.startswith("Br"):
-            hw.append(_object(f"{pre} Nut {nm} Top", _hex("nut", NUT_AF, bz1, bz1 + NUT_H), col, color=HW_COL, location=(x, y, 0.0)))
+            hw.append(_object(f"{pre} Nut {nm} Top", _revolve("acorn nut", _acorn_prof(bz1), 6, 0), col, color=HW_COL,
+                              location=(x, y, 0.0)))
+        else:
+            hw.append(_object(f"{pre} Nut {nm} Top", _hex("nut", NUT_AF, nut_tops[nm] - NUT_H, nut_tops[nm]), col, color=HW_COL,
+                              location=(x, y, 0.0)))
     go = O[n["out"]]
     hw.append(_object(f"{pre} Rod Star", _cyl("rod", ROD_R, bz0 + 0.5, go.location.z + sot.GEAR_H / 2 - 0.6, 24), col,
                       color=HW_COL, location=(sx, sy, 0.0)))
-    hw.append(_object(f"{pre} Nut Star", _hex("nut", NUT_AF, bz0 + 0.3, bz0 + 0.3 + NUT_H), col, color=HW_COL, location=(sx, sy, 0.0)))
+    hw.append(_object(f"{pre} Nut Star", _hex("nut", NUT_AF, nut_tops["Star"] - NUT_H, nut_tops["Star"]), col, color=HW_COL,
+                      location=(sx, sy, 0.0)))
     for h in hw:
         h["reference"] = "hardware stand-in, not printed"
     rods = {o.name: round(o.dimensions.z, 1) for o in hw if " Rod " in o.name}
     return dict(parts=sorted(made), rods=rods)
+
+
+def _acorn_prof(z0):
+    """Rough acorn nut standing on z0 (turned with 6 sides: the hex, then a dome)."""
+    rc = NUT_AF / math.sqrt(3)
+    pts = [(0.0, z0), (rc, z0), (rc, z0 + NUT_H), (NUT_AF / 2, z0 + NUT_H + 0.8)]
+    dr = NUT_AF / 2
+    pts += [(dr * math.cos(math.pi / 2 * i / 6), z0 + ACORN_H - dr + dr * math.sin(math.pi / 2 * i / 6)) for i in range(1, 7)]
+    return pts
 
 
 def _foot_prof(peg=False):

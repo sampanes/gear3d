@@ -348,8 +348,10 @@ part's swept volume; `export_stand(unit)` writes one STL per part design.
 - Bearings: every turning group runs on two 608s (8 x 22 x 7) on a fixed M8 rod, one pressed
   into each outer face of the group (the 21.9 holes the gears already have). A plug between
   the two seats carries the outer races; a 16 x 0.6 counterbore keeps each inner race clear;
-  the rod hole is 8.6. Each inner race rests on a spacer ring (r 5.5, 1 tall) on top of what
-  holds the rod, 1 mm under the group's bed face. 12 bearings in all for the corner.
+  the rod hole is 8.6. Each inner race rests on an M8 hex nut sunk in a pocket at the top of
+  what holds the rod (13.3 across flats, open at the top, floor 6.5 under the bed face), so
+  the nut stands 1 proud of the support, 1 mm under the group's bed face; the nut is the
+  spacer and touches only the inner race and the seal. 12 bearings in all for the corner.
   - Driver A + 27T: one part (as the P stack); a collar r 14.7 joins them (A's hub windows
     start at r 15.2). Seats in the 27T's bed face and A's top face.
   - Driver B: a fluted drum under it (z -57..-48, r 16.5) carries the lower bearing.
@@ -364,13 +366,15 @@ part's swept volume; `export_stand(unit)` writes one STL per part design.
   on the other (r 127.3).
   - Pedestals under P, A and B (part of the floor tiles): Attic base, top 1 below the bed faces.
   - Columns (printed apart, a spigot into a floor socket, the rod through them): under each O
-    (shaft r 12.5 with 12 flutes, echinus capital r 17, spacer ring on top; 5+ mm from driver
-    B / A); under the corner R up to the letter plane (z 14, the R sits on it); and the
-    bridge's two (spigot into the beam above).
+    (shaft r 12.5 with 12 flutes, echinus capital r 17, nut pocket on top; 5+ mm from driver
+    B / A); under the corner R up to the letter plane (z 14, the R sits on it, over a nut
+    flush with the top); and the bridge's two (spigot into the beam above).
   - Bridge: a beam through the star gap (z -39..-31, 1 mm air to the A/B gears below and the
     star above), waisted round the star to stay 2.5 off the pin posts' sweep (28 wide at the
     star, 40 at the columns), stepped fasciae on its sides, rivets round each end. The star's
-    rod stands in a nut trap at its centre; each end is clamped down by a nut on its rod.
+    rod hangs from a nut in a pocket in its top (floor 2.5 thick, so nothing can sag onto A
+    and B); each end is clamped down by an acorn nut on its rod (room for one: 2+ mm to
+    everything that turns, up past its 15 mm height).
     Measured: 1.5 to 2 mm from the pin posts' swept volume, the tightest spot of the stand.
   - Floor: radius 158 round the star axis, 6 thick (z -68..-62), a compass rose: spokes along
     the 8 lines, rings at r 80 and r 127.3, a rim 14 wide with rivets, round windows (r 4
@@ -378,18 +382,26 @@ part's swept volume; `export_stand(unit)` writes one STL per part design.
     256 bed) with their seams between the spokes, so no support sits on a seam; a keystone
     (r 36, compass rose in relief, rivets) sits 3 deep over the point where they meet; eight
     bow-tie keys (3 deep) cross the seams. Bun feet under it, printed apart so the tiles
-    print flat: one under each support holds that rod's nut (trap from below), four smaller
-    ones near the centre peg in.
-- Hardware for the corner (M8 threaded rod, cut lengths, nut at the bottom in each foot): P 71,
-  A 35, B 35, each O 62, R 86, bridge columns 53 (x2, a second nut on top of the beam), star 25
-  (in the bridge's nut trap). 12 x 608 bearings, 11 M8 nuts, 2 steel 4 x 25.7 drive pins.
+    print flat: one under each support holds that rod's lower nut (trap 13.3 across flats,
+    6.8 deep, open below), four smaller ones near the centre peg in. Every rod runs between
+    two nuts (foot trap and support pocket), so the stand can be lifted without the rods,
+    feet or tiles dropping out.
+- Hardware for the corner: M8 threaded rod (one 1 m length), cut to P 71, A 35, B 35, each
+  O 62, R 89, bridge columns 53 (x2), star 25; cut 0 to 1 short, never long (most rod tops end
+  0.6 under a turning face). Plain hex nuts (DIN 934 / ISO 4032: 13 across flats, at most 6.8
+  tall; not nyloc or flange) x 15: one in each foot, one on top of P, A, B, O1, O2, R and the
+  star. 2 M8 acorn nuts (DIN 1587) on the bridge ends. 12 x 608 bearings, 2 steel 4 x 25.7
+  drive pins. Stock bolts do not fit: the lengths fall between standard sizes and would leave a
+  bearing short of rod or rub a boss. The nuts sit in hex pockets, so they hold the rods in
+  place rather than clamp them (spin a foot nut up snug, then back it off to the nearest flat).
 - Print: floor tiles, keystone, keys, feet, columns and beam need no supports (columns stand
   on their spigot; the beam prints bed face down). The turning parts that join two gears (P
   stack, A + 27T, star + S gear) and the drums under B and the O's need supports under the
   overhang.
 - Checked: `check_stand` finds nothing within 1.5 mm (rods and nuts left out: they sit in the
-  bores on purpose); the unit's own `check()` still reports no overlaps; every exported part
-  is one closed solid.
+  bores on purpose); the rods and nuts stay 2+ mm from every turning part on another axis and
+  each nut sits in its pocket without touching the print; the unit's own `check()` still
+  reports no overlaps; every exported part is one closed solid.
 - Not yet: the letters are not fastened (the O's and P float above their gears), and the
   corner R has no gear (it stands on its column).
 
