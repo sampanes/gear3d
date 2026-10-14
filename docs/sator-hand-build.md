@@ -236,9 +236,9 @@ reports clearances; `layout()` holds the axis positions.
 - Drive pins are steel (sourced), 4 mm (`PIN_D`; the slots are 4.8 wide, so change it and
   rebuild if the pins differ). Each presses through a 4.1 mm hole (`PIN_FIT` 1.025) in its 64T
   driver gear at r 50.9 and stands up through the gap into the star layer: pin length 25.7 mm
-  (gear bottom z -48 to 0.3 below the star top; a stock 4 x 25 stops 1 below it). The printed
-  locking boss carries no pin. Grey `Pin`
-  objects in each unit's collection are stand-ins (not exported).
+  (gear bottom z -48 to 0.3 below the star top; a stock 4 x 25 stops 1 below it). It is held
+  for 17 of that by the gear and the pin post (below). Grey `Pin` objects in each unit's
+  collection are stand-ins (not exported).
 - A and B sit on the grid line through the star (A at (269.3, 198.0), B at (270.7, 342.0) for
   NE), 72 from the star: within 0.6 deg of the grid because |A - P| must be (27 + 54) * 2.25 / 2.
   On the diagonal they covered P's axis. Rule: no part may cover another letter's axis
@@ -258,11 +258,35 @@ reports clearances; `layout()` holds the axis positions.
   dots on every gear): P 64T `scurve` x4, 1 step, hub r 22 (mostly window: it tops its stack;
   `straight` x4 at `SPOKE_W=5` was the alternative); 54T under it `ringed` x5, 2 steps, hub
   r 18 (P's old far-letter look); O 56T `holes` x6, 1 step (round windows under the O's; they
-  top the unit); A/B 64T
-  `straight` x8, flat full height, solid hub r 43 (the locking boss, r 40.4, sits on it), one
-  spoke turned onto the steel pin, whose hole is cut in the crossings (the pin is inside the
-  opened bore); 27T rim dots only (no room inside its roots). Every gear + crossings exports
-  as one closed solid (`export_stl`: shells 1, non-manifold 0).
+  top the unit); A/B 64T `scurve` x6, `SPOKE_W=8`, flat full height (the pin post's arm
+  rides a spoke), hub r 36 (under the boss's corbel foot, r <= 34), the spoke that crosses
+  r 50.9 turned onto the steel pin (`crossings.spoke_turn`), whose hole is cut in the
+  crossings (the pin is inside the opened bore); 27T rim dots only (no room inside its roots).
+  Every gear + crossings exports as one closed solid (`export_stl`: shells 1, non-manifold 0).
+- Carving of the Geneva parts (`cad/toggle_carve.py`, outlines from `cad/carve.py`: signed
+  distance fields on a 0.25 grid, windows opened to a 2.5 corner radius, cutters lofted
+  through the outline traced at offsets so their edges are shaped; every cutter crosses the
+  part's faces at an angle, never lying on one, and each window grows no closer than 0.4 to
+  the midline to its neighbours):
+  - Star: a 4.5 frame along the whole outline (slots, pockets, rim), hub r 17 round the 21.9
+    bearing hole, an S-curved rib 5 wide from the hub to each lobe without a slot (curling the
+    same way as the S gear's arms; the slot walls brace the other two lobes); six windows,
+    1.2 round on top, 0.6 x 45 chamfer on the bed side.
+  - Locking bosses: the exact locking outline only where the star is (z -31..-22, the crown);
+    under it a corbel narrowing to 0.84 of the outline at the gear (49 deg at its steepest,
+    prints unsupported) with 20 leaf flutes 1.2 deep, as on the P column's capital. A raised
+    border 3 wide runs round the crown's top, the panel inside 1.2 lower; two windows run
+    from the panel down through the corbel and the gear's hub to the bed.
+  - Pin posts: a collar r 4.5 round each steel pin from 0.2 above the gear's bed face up to
+    1 below the star, tied to the corbel by an arm 5 wide that rides the S spoke carrying the
+    pin (checked: the arm sits on spoke or hub all the way). The pin is then held for 17 of its
+    25.7 mm; only the 8 in the star's slot stand free.
+  - S gear: windows as before (toothed arcs, S arms, hub) with the same edges; the arms stand
+    2.5 lower than the rims and hub, their top edges rounded, and the rims and hub get a 1.2
+    stepped border along the windows.
+  - Exports: `export_toggle_parts(unit)` -> `cad/export/`: `Toggle_Star_<unit>`,
+    `Gear_S_56T_<unit>`, `Gear_Driver_<A|B>_<unit>` (64T + crossings + boss + post as one);
+    each one closed solid; NE and SW match (same volume and extents; not byte-identical).
 - P stack: the P 64T (z -12..-4), the 54T (-57..-49) and a tube between them print as ONE part
   (`export_p_stack(unit)` -> `cad/export/Gear_P_Stack_<unit>.stl`; NE and SW are byte-identical,
   so print one design twice). It turns on two 22 mm bearings (608, 8 x 22 x 7, `BEARING_W`) on a
@@ -288,11 +312,12 @@ reports clearances; `layout()` holds the axis positions.
   letter plane on their own shafts.
 - Star gap: the A/B gears mesh right under the star axis, so the star's rod cannot run down
   past them; it ends in the gap, held by a bracket fed in sideways (open). In the gap only the
-  steel pins (orbit r 50.9 + 2 around each driver axis) and the bosses inside that orbit
-  move: around the star axis the gap is clear to r 19.1 (`check()` -> `star_gap_clear_r`),
-  and it opens up away from the axis at right angles to the A-B line (half-width 23 at 20 out,
-  28 at 30, 37 at 40, unlimited past 53), so an arm up to 30 wide fits from either side. 1 mm
-  air above and below leaves 8 for the bracket. Changing `STAR_GAP` moves the A/B and input
+  pin posts (collar r 4.5 at r 50.9 round each driver axis) and the bosses inside their
+  sweep move: around the star axis the gap is clear to r 16.6 (`check()` ->
+  `star_gap_clear_r`), and it opens up away from the axis at right angles to the A-B line
+  (half-width 20.3 at 20 out, 25.4 at 30, 33.7 at 40, unlimited past 55.4), so an arm up to
+  30 wide fits from either side (1.6 clear at the axis; 28 wide leaves 2.6). 1 mm air above
+  and below leaves 8 for the bracket. Changing `STAR_GAP` moves the A/B and input
   layers (and the P stack's 54T) with it; the star and everything above stay put.
 - All meshes checked with a BVH overlap test (clear at the modeled distance, colliding 0.15 mm
   closer, same as the 96T-letter pairs). The future 96T E and S, placed by meshing the middle
@@ -312,5 +337,5 @@ reports clearances; `layout()` holds the axis positions.
   127.28 (0.16 mm loose) -- or shift it like the 56T. R then turns with P (upright).
 - O toggle hardware: shafts and supports for the hanging unit (star + 56T on one shaft, its
   lower end held by a bracket in the star gap; A + 27T, B; the P stack is settled: 608 bearings on a fixed M8 rod, which still needs its own
-  mounts); union each driver's locking boss onto its 64T for export (A and B differ: the pin
-  hole sits at a different tooth phase on each).
+  mounts). Each driver's boss and pin post already export with its 64T (A and B differ: the
+  pin hole sits at a different tooth phase on each).

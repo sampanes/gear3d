@@ -103,16 +103,17 @@ LEAF_D = 1.2        # depth of the flutes carried up the echinus (they widen wit
 # crossings (cad/crossings.py) for the unit's gears: (style, count, settings). The P letter
 # gear is mostly window (it sits on top of its stack, over the 54T) with a big hub for the
 # column's capital; the 54T under it carries the far letters' ringed x5. The O gears sit on top
-# of the unit (1 step, round windows under the O's); the A/B drivers carry the locking boss on
-# a solid hub (r 43 > boss 40.4, full height so the boss sits flat) and a spoke turned onto the
-# steel pin. The 27T has no room inside its roots for crossings and gets rim dots only.
+# of the unit (1 step, round windows under the O's); the A/B drivers: S spokes, flat full
+# height (the pin post's arm rides one), the hub (r 36) under the boss's corbel foot, one
+# spoke turned onto the steel pin. The 27T has no room inside its roots for crossings and gets
+# rim dots only. The star, bosses and S gear are carved by cad/toggle_carve.py.
 DECOR = {
     "P": ("scurve", 4, dict(SPOKE_W=6.0, LAYERS=1, BASE_T=3.5, STEP_T=2.0, STEP_INSET=1.25,
                             RIM_TEETH=64, HUB_MIN_R=22.0)),
     "O": ("holes", 6, dict(SPOKE_W=6.0, LAYERS=1, BASE_T=3.5, STEP_T=2.0, STEP_INSET=1.25, RIM_TEETH=OUT_T)),
     "p54": ("ringed", 5, dict(SPOKE_W=7.0, LAYERS=2, BASE_T=3.0, STEP_T=1.75, STEP_INSET=1.0,
                               RIM_TEETH=P_GEAR_T, HUB_MIN_R=18.0)),
-    "driver": ("straight", 8, dict(SPOKE_W=9.0, HUB_MIN_R=43.0)),
+    "driver": ("scurve", 6, dict(SPOKE_W=8.0, HUB_MIN_R=36.0)),
 }
 
 
@@ -322,8 +323,10 @@ def _steel_pin(gear, drive, d, star_xy, star_top, name):
     cut.hide_set(True)
     # the pin sits inside the bore of a gear with crossings: turn a spoke onto it, cut it there
     target = bpy.data.objects.get(f"{gear.name} Crossings") or gear
-    if target is not gear:
-        target.rotation_euler.z = math.atan2(cut.location.y, cut.location.x)
+    if target is not gear:  # curved spokes: turn the one that crosses the pin's radius onto it
+        r_pin = math.hypot(cut.location.x, cut.location.y)
+        target.rotation_euler.z = (math.atan2(cut.location.y, cut.location.x)
+                                   - _load("crossings").spoke_turn(target, r_pin))
     mod = target.modifiers.new("Pin Hole", "BOOLEAN")
     mod.operation, mod.solver, mod.object = "DIFFERENCE", "EXACT", cut
     pin = bpy.data.objects.new(name, _cylinder(name, PIN_D / 2, z0, star_top - PIN_TOP_GAP))
@@ -401,31 +404,12 @@ def _sector_windows(gear, mesh_dirs):
 
 
 def _sector_cut(gear, mesh_dirs):
-    """Boolean the gear down to its toothed arcs, arms and hub (cutter parented, hidden)."""
+    """Cut the gear down to its toothed arcs, arms and hub, with shaped edges and the arms
+    dropped below the rims (toggle_carve.sector; cutters parented, hidden)."""
     windows, arcs = _sector_windows(gear, mesh_dirs)
-    me = bpy.data.meshes.new(f"{gear.name} Sector Cutter")
-    bm = bmesh.new()
-    for loop in windows:
-        lo = [bm.verts.new((x, y, -GEAR_H - 1)) for x, y in loop]
-        hi = [bm.verts.new((x, y, GEAR_H + 1)) for x, y in loop]
-        n = len(loop)
-        for i in range(n):
-            j = (i + 1) % n
-            bm.faces.new((lo[i], lo[j], hi[j], hi[i]))
-        bm.faces.new(hi)
-        bm.faces.new(lo[::-1])
-    bmesh.ops.triangulate(bm, faces=[f for f in bm.faces if len(f.verts) > 4])
-    bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
-    bm.to_mesh(me)
-    bm.free()
-    cut = bpy.data.objects.new(me.name, me)
-    for c in gear.users_collection:
-        c.objects.link(cut)
-    cut.parent = gear
-    cut.display_type, cut.hide_render = "WIRE", True
-    cut.hide_set(True)
-    mod = gear.modifiers.new("Sector Cut", "BOOLEAN")
-    mod.operation, mod.solver, mod.object = "DIFFERENCE", "EXACT", cut
+    sg = _load("sator_gears")
+    zs = [v[2] for v in gear.bound_box]
+    _load("toggle_carve").sector(gear, windows, HUB_R, sg.root_radius(sg.props(gear)) - RIM_T, min(zs), max(zs))
     return [(round(math.degrees(a0), 2), round(math.degrees(a1), 2)) for a0, a1 in arcs]
 
 
@@ -474,6 +458,18 @@ def build_unit(unit):
     for g, d, side in ((ga, drive.drivers[0], "A"), (gb, drive.drivers[1], "B")):
         _steel_pin(g, drive, d, L["star"], star_top, f"{n['col']} Pin {side}")
 
+    # carving: star windows and ribs, the bosses as corbels, a post round each pin
+    tc = _load("toggle_carve")
+    zs = [v.co.z for v in star.data.vertices]
+    result["carve"] = {"star": tc.star(star, drive, min(zs), max(zs))}
+    bpy.context.view_layer.update()
+    for i, (g, bo) in enumerate(zip((ga, gb), drivers)):
+        cr = bpy.data.objects[f"{g.name} Crossings"]
+        result["carve"][bo.name] = tc.boss(bo, drive, i, STAR_GAP + gv.BUILD_DEFAULTS["thick"], STAR_GAP - 1.0,
+                                           GEAR_H, cr)
+        turn = _load("crossings").spoke_turn
+        tc.post(bo, drive, i, lambda r, cr=cr: turn(cr, r) - turn(cr, drive.a), STAR_GAP - 1.0, GEAR_H, PIN_FIT)
+
     # the 54T is printed with the P gear, so it keeps P's angle (both units then print the same
     # stack); the 27T turns to mesh it
     g54 = spur("p54", P_GEAR_T, L["P"], Z_INPUT, decor="p54")
@@ -518,7 +514,8 @@ def _footprints(unit):
     dg = bpy.context.evaluated_depsgraph_get()
     out = []
     names = [n[k] for k in ("A", "B", "input", "p54", "out", "O1", "O2", "P")] + [f"{n['P']} Tube"]
-    names += [o.name for o in bpy.data.objects[n["toggle"]].children]
+    names += [o.name for o in bpy.data.objects[n["toggle"]].children_recursive
+              if o.type == "MESH" and not o.hide_render]  # star, bosses, pin posts
     for name in names:
         ob = bpy.data.objects[name]
         me = ob.evaluated_get(dg).to_mesh()
@@ -545,7 +542,10 @@ def check(unit):
     tube = f"{n['P']} Tube"
     meshing = {frozenset(p) for p in ((n["A"], n["B"]), (n["input"], n["p54"]), (n["out"], n["O1"]),
                                       (n["out"], n["O2"]), (tube, n["P"]), (tube, n["p54"]))}
-    toggle = {o.name for o in bpy.data.objects[n["toggle"]].children}
+    for side in "AB":  # each boss and pin post is printed with its driver gear
+        bo = f"{n['toggle']} Driver {side}"
+        meshing |= {frozenset((n[side], x)) for x in (bo, f"{bo} Pin Post")}
+    toggle = {o.name for o in bpy.data.objects[n["toggle"]].children_recursive}
     for i, (na, pa, ra, a0, a1, rza) in enumerate(parts):
         for nb, pb, rb, b0, b1, rzb in parts[i + 1:]:
             lo, hi = max(a0, b0), min(a1, b1)
@@ -560,13 +560,13 @@ def check(unit):
             elif tube in (na, nb):
                 report.setdefault("tube_gaps", {})[nb if na == tube else na] = round(gap, 2)
     report["min_letter_gap"] = min(report["letter_gap"].values())
-    # STAR_GAP: free radius around the star axis, inside the circles the steel pins sweep
+    # STAR_GAP: free radius around the star axis, inside the circles the pin posts sweep
     star = bpy.data.objects[n["toggle"]].location
     sweep = []
     for side in "AB":
         g = bpy.data.objects[n[side]]
         pin = bpy.data.objects[f"{n['col']} Pin {side}"].location
-        orbit = math.hypot(pin.x - g.location.x, pin.y - g.location.y) + PIN_D / 2
+        orbit = math.hypot(pin.x - g.location.x, pin.y - g.location.y) + _load("toggle_carve").POST_R
         sweep.append(math.hypot(g.location.x - star.x, g.location.y - star.y) - orbit)
     report["star_gap_clear_r"] = round(min(sweep), 2)
     return report
@@ -580,6 +580,24 @@ def export_p_stack(unit, path=None):
         path = os.path.join(_HERE, "export", f"Gear_P_Stack_{unit}.stl")
     return _load("sator_gears").export_stl(p, path, extra=(bpy.data.objects[f"{n['P']} Tube"],
                                                          bpy.data.objects[n["p54"]]))
+
+
+def export_toggle_parts(unit, out_dir=None):
+    """The unit's carved Geneva parts, each ONE solid (part-local): the star, the S gear, and
+    each driver (64T + crossings + locking boss + pin post). {name: (path, shells,
+    non_manifold)}."""
+    n = _names(unit)
+    sg = _load("sator_gears")
+    out_dir = out_dir or os.path.join(_HERE, "export")
+    O = bpy.data.objects
+    res = {"Star": sg.export_stl(O[f"{n['toggle']} Star"], os.path.join(out_dir, f"Toggle_Star_{unit}.stl")),
+           "S gear": sg.export_stl(O[n["out"]], os.path.join(out_dir, f"Gear_S_56T_{unit}.stl"))}
+    for side in "AB":
+        bo = O[f"{n['toggle']} Driver {side}"]
+        res[f"Driver {side}"] = sg.export_stl(
+            O[n[side]], os.path.join(out_dir, f"Gear_Driver_{side}_{unit}.stl"),
+            extra=(bo, O[f"{bo.name} Pin Post"]))
+    return res
 
 
 def build_o_toggles(save=False):

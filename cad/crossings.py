@@ -930,6 +930,24 @@ SETTINGS = ("BEARING_HOLE_D", "HUB_WALL", "HUB_MIN_R", "SPOKE_W", "SWEEP_DEG", "
             "RIM_TEETH", "RIM_TEETH_H", "BARBS", "BARB_AT", "BARB_H", "BARB_L", "BARB_SWEEP", "BARB_FILLET", "FOIL_EXTRA")
 
 
+def spoke_turn(ob, r):
+    """How far (rad) the spoke centre lines of a built crossings object `ob` have turned at
+    radius r (gear-local), from where they leave the hub; spoke 0 leaves at angle 0. Radial
+    styles return 0."""
+    import json
+    style = ob["crossings_style"]
+    if style not in ("spiral", "scurve", "blades"):
+        return 0.0
+    st = json.loads(ob["crossings_settings"])
+    hub_r = max(st["BEARING_HOLE_D"] / 2 + st["HUB_WALL"], st["HUB_MIN_R"])
+    r_out = _gear_props(ob.parent).bore_size - st["RIM_LIP"]
+    t = (r - hub_r) / (r_out - hub_r)
+    if style == "scurve":
+        c = min(max(t, 0.0), 1.0)
+        t = c * c * (3 - 2 * c)
+    return math.radians(st["SWEEP_DEG"]) * t
+
+
 def build(gear, style=None, count=None, **settings):
     """Build crossings for `gear`; keyword settings (e.g. BEARING_HOLE_D=0) override the header."""
     import json
