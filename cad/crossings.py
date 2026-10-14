@@ -36,7 +36,7 @@ import bpy
 # ==== settings (mm) ====
 STYLE = "spiral"
 COUNT = 5            # spokes / blades / windows
-BEARING_HOLE_D = 21.9  # printed hole that grips the bearing (22 mm OD -> 21.9, 16 mm OD -> 15.9; 0 = none)
+BEARING_HOLE_D = 21.9  # printed hole that grips the bearing (22 mm OD -> 21.9, 16 mm OD -> 16.0, set by the fit coupons; 0 = none)
 HUB_WALL = 5.0       # solid ring around the bearing hole
 HUB_MIN_R = 16.0     # smallest solid hub radius (also used when there is no hole)
 SPOKE_W = 7.0        # spoke width (gothic: wall between windows)

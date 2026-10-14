@@ -45,7 +45,7 @@ per half board turn (see "O toggle units" below).
   arms of the cross match.
 - 16T idlers (top layer) line up with the 96T contact directions (N/S/E/W).
   `Gear_Idler_16T_N/S/E/W` sit at (0, 90), (0, -90), (90, 0), (-90, 0), z 8, each rotated
-  -11.25 deg to mesh; 15.9 bearing hole (bore radius 7.95), solid web (7.1 mm rim to the
+  -11.25 deg to mesh; 16.0 bearing hole (bore radius 8.0), solid web (7.1 mm rim to the
   root leaves no room for crossings).
 - Idler hub cut: `sator_gears.add_hub_cut(gear, style)` sinks a decorative pocket 3 mm into the
   top face around the bearing hole and leaves the bottom 5 mm as a plain bearing seat (the
@@ -156,13 +156,15 @@ per half board turn (see "O toggle units" below).
 
 ## Bearings
 
-Modeled hole diameters for a tight press fit of the bearings on hand. Holes print true to
-size on the current printer: 16.2 / 22.3 (snug on the old Ender) let the bearings fall through.
-The values below are a first guess at a firm press; confirm with the fit coupons.
+Modeled hole diameters for a press fit of the bearings on hand. Holes print true to size on
+the current printer: 16.2 / 22.3 (snug on the old Ender) let the bearings fall through.
+Settled with the fit coupons: 21.9 is a very tight press for the 22 mm bearings (kept);
+16.0 is snug for the 16 mm ones (chosen over the tighter 15.9; the idler's axle hardware
+holds the bearing in).
 
 | Bearing OD | Modeled hole dia | Suggested use | Notes |
 | --- | --- | --- | --- |
-| 16 mm | 15.9 mm | 16T idlers | a 22 mm-class hole would leave only ~4 mm to a 16T root; 15.9 leaves ~7.2 mm |
+| 16 mm | 16.0 mm | 16T idlers | a 22 mm-class hole would leave only ~4 mm to a 16T root; 16.0 leaves ~7.2 mm |
 | 22 mm | 21.9 mm | 64T letter gears, 96T gears | needs hub radius >= ~16 mm (5 mm wall) |
 
 Fit coupons (`sator_gears.fit_coupon`, collection `Test Prints`, exported as
@@ -410,7 +412,7 @@ part's swept volume; `export_stand(unit)` writes one STL per part design.
   - Stand: `Stand_Floor_Q1_NE` .. `Q4` (one each), `Stand_Keystone_NE`, `Stand_Key_NE` x8,
     `Stand_Foot_NE` x8, `Stand_Foot_Hub_NE` x4, `Stand_Column_O_NE` x2, `Stand_Column_R_NE`,
     `Stand_Column_Br_NE` x2, `Stand_Bridge_NE`.
-  - First: `Fit_Coupon_22` (every bearing seat is the 21.9 guess; see "Bearings").
+  - Bearing seats are 21.9, settled with `Fit_Coupon_22` (see "Bearings").
 - Checked: `check_stand` finds nothing within 1.5 mm (rods and nuts left out: they sit in the
   bores on purpose); the rods and nuts stay 2+ mm from every turning part on another axis and
   each nut sits in its pocket without touching the print; the unit's own `check()` still
