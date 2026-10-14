@@ -25,8 +25,9 @@ A and B sit on the grid line through the star (not on the diagonal), so no part 
 letter center: every letter's axis stays open to the sky.
 
 The unit hangs below the board's bottom layer (z -12), top down: 56T output gears, the
-star (with the drivers' locking bosses and pins), the A/B gears, the input pair. The O
-letters reach the letter plane on their own shafts; the board's layers are unchanged.
+star (with the drivers' locking bosses and pins), STAR_GAP of air over the A/B mesh (room
+for a bracket holding the star's rod), the A/B gears, the input pair. The O letters reach
+the letter plane on their own shafts; the board's layers are unchanged.
 """
 
 import importlib.util
@@ -55,10 +56,11 @@ DRIVER_T, INPUT_T, P_GEAR_T, OUT_T = 64, 27, 54, 56
 BEARING_R = 10.95  # 21.9 hole, the 22 mm bearings
 GEAR_H = 8.0
 # layer centers (gear height 8, 1 mm air between layers); the board's bottom layer ends at z -12
+STAR_GAP = 10.0     # air under the star, over the A/B mesh: room for a bracket holding the star's rod
 Z_OUT = -17.0       # 56T output gears: -21 .. -13
-Z_STAR_BASE = -31.0  # top of the A/B gears; star -30 .. -22 (1 mm air), bosses and pins stand here
-Z_DRIVER = -35.0    # A/B 64T: -39 .. -31
-Z_INPUT = -44.0     # 27T + 54T: -48 .. -40
+Z_STAR_BASE = -30.0 - STAR_GAP  # top of the A/B gears (-40); star -30 .. -22; bosses and pins stand here
+Z_DRIVER = Z_STAR_BASE - GEAR_H / 2      # A/B 64T: -48 .. -40
+Z_INPUT = Z_DRIVER - GEAR_H - 1.0        # 27T + 54T: -57 .. -49
 TEMPLATE = "Gear_Letter_64T_N2"  # far (bottom layer) letter gear, cloned for the P cells
 UNITS = {
     "NE": dict(sign=1, p_cell=(2, 4), o_cells=((1, 4), (2, 5)), big="Gear_96T", big_dir=0.0),
@@ -454,8 +456,8 @@ def build_unit(unit):
     drive = gm.toggle(SWING, C, a_deg=L["a_deg"], b_deg=L["b_deg"], land=LAND, bore_d=2 * BEARING_R,
                       pin_d=PIN_D)
     root, star, drivers, result = gv.build(drive, n["toggle"], location=(*L["star"], Z_STAR_BASE),
-                                           plate_t=0.0, pin="steel", collection=n["col"])
-    star_top = Z_STAR_BASE + gv.BUILD_DEFAULTS["z_gap"] + gv.BUILD_DEFAULTS["thick"]
+                                           plate_t=0.0, z_gap=STAR_GAP, pin="steel", collection=n["col"])
+    star_top = Z_STAR_BASE + STAR_GAP + gv.BUILD_DEFAULTS["thick"]
 
     def spur(key, teeth, xy, z, shift=None, decor=None):
         # decorated gears open the bore to the rim (sator_gears.RIM) and fill it with crossings
@@ -558,6 +560,15 @@ def check(unit):
             elif tube in (na, nb):
                 report.setdefault("tube_gaps", {})[nb if na == tube else na] = round(gap, 2)
     report["min_letter_gap"] = min(report["letter_gap"].values())
+    # STAR_GAP: free radius around the star axis, inside the circles the steel pins sweep
+    star = bpy.data.objects[n["toggle"]].location
+    sweep = []
+    for side in "AB":
+        g = bpy.data.objects[n[side]]
+        pin = bpy.data.objects[f"{n['col']} Pin {side}"].location
+        orbit = math.hypot(pin.x - g.location.x, pin.y - g.location.y) + PIN_D / 2
+        sweep.append(math.hypot(g.location.x - star.x, g.location.y - star.y) - orbit)
+    report["star_gap_clear_r"] = round(min(sweep), 2)
     return report
 
 

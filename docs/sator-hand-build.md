@@ -235,8 +235,9 @@ reports clearances; `layout()` holds the axis positions.
   pin 4, lock play 3.65 / 0.5 deg (same as the printed rig).
 - Drive pins are steel (sourced), 4 mm (`PIN_D`; the slots are 4.8 wide, so change it and
   rebuild if the pins differ). Each presses through a 4.1 mm hole (`PIN_FIT` 1.025) in its 64T
-  driver gear at r 50.9 and stands up into the star layer: pin length 16.7 mm (gear bottom
-  z -39 to 0.3 below the star top). The printed locking boss carries no pin. Grey `Pin`
+  driver gear at r 50.9 and stands up through the gap into the star layer: pin length 25.7 mm
+  (gear bottom z -48 to 0.3 below the star top; a stock 4 x 25 stops 1 below it). The printed
+  locking boss carries no pin. Grey `Pin`
   objects in each unit's collection are stand-ins (not exported).
 - A and B sit on the grid line through the star (A at (269.3, 198.0), B at (270.7, 342.0) for
   NE), 72 from the star: within 0.6 deg of the grid because |A - P| must be (27 + 54) * 2.25 / 2.
@@ -262,7 +263,7 @@ reports clearances; `layout()` holds the axis positions.
   spoke turned onto the steel pin, whose hole is cut in the crossings (the pin is inside the
   opened bore); 27T rim dots only (no room inside its roots). Every gear + crossings exports
   as one closed solid (`export_stl`: shells 1, non-manifold 0).
-- P stack: the P 64T (z -12..-4), the 54T (-48..-40) and a tube between them print as ONE part
+- P stack: the P 64T (z -12..-4), the 54T (-57..-49) and a tube between them print as ONE part
   (`export_p_stack(unit)` -> `cad/export/Gear_P_Stack_<unit>.stl`; NE and SW are byte-identical,
   so print one design twice). It turns on two 22 mm bearings (608, 8 x 22 x 7, `BEARING_W`) on a
   fixed M8 threaded rod: each gear keeps its 21.9 bearing hole and the tube plugs it 7 below the
@@ -278,12 +279,21 @@ reports clearances; `layout()` holds the axis positions.
   (`TUBE_R`): A's tooth tips pass 2.4 from it (they reach 16.9 from P's axis); A turns 1 mm
   above the 54T, so the base cannot spread wider. The 54T keeps P's angle (the stack is built
   that way in both units) and the 27T turns to mesh it. Print it 54T down with supports under
-  the P gear (28 mm of air under a 74 mm radius wheel); the column needs none.
+  the P gear (37 mm of air under a 74 mm radius wheel); the column needs none.
   `check()` measures each part's radius only over the height band it shares with another, so
   the capital is not counted against A.
 - The unit hangs below the board; the board's layers are unchanged. Top down: 56T output
-  gears z -21..-13, star -30..-22 (bosses and pins stand on the A/B gears), A/B 64T -39..-31,
-  27T + 54T -48..-40. The O letters reach the letter plane on their own shafts.
+  gears z -21..-13, star -30..-22, 10 mm of air (`STAR_GAP`; the bosses and pins stand on the
+  A/B gears up through it), A/B 64T -48..-40, 27T + 54T -57..-49. The O letters reach the
+  letter plane on their own shafts.
+- Star gap: the A/B gears mesh right under the star axis, so the star's rod cannot run down
+  past them; it ends in the gap, held by a bracket fed in sideways (open). In the gap only the
+  steel pins (orbit r 50.9 + 2 around each driver axis) and the bosses inside that orbit
+  move: around the star axis the gap is clear to r 19.1 (`check()` -> `star_gap_clear_r`),
+  and it opens up away from the axis at right angles to the A-B line (half-width 23 at 20 out,
+  28 at 30, 37 at 40, unlimited past 53), so an arm up to 30 wide fits from either side. 1 mm
+  air above and below leaves 8 for the bracket. Changing `STAR_GAP` moves the A/B and input
+  layers (and the P stack's 54T) with it; the star and everything above stay put.
 - All meshes checked with a BVH overlap test (clear at the modeled distance, colliding 0.15 mm
   closer, same as the 96T-letter pairs). The future 96T E and S, placed by meshing the middle
   gear, also mesh P R2C4 / R4C2 (the loop's tooth phases agree).
@@ -300,7 +310,7 @@ reports clearances; `layout()` holds the axis positions.
   P, and the O toggle sits on the P -> R path. Idea: a free idler on the star's axis (own
   bearing, own layer) meshing P 64T and R 64T: 49T at module 2.25 spans 127.125 of the needed
   127.28 (0.16 mm loose) -- or shift it like the 56T. R then turns with P (upright).
-- O toggle hardware: shafts and supports for the hanging unit (star + 56T on one shaft, A +
-  27T, B; the P stack is settled: 608 bearings on a fixed M8 rod, which still needs its own
+- O toggle hardware: shafts and supports for the hanging unit (star + 56T on one shaft, its
+  lower end held by a bracket in the star gap; A + 27T, B; the P stack is settled: 608 bearings on a fixed M8 rod, which still needs its own
   mounts); union each driver's locking boss onto its 64T for export (A and B differ: the pin
   hole sits at a different tooth phase on each).
