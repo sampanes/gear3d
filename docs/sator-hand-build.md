@@ -353,10 +353,15 @@ part's swept volume; `export_stand(unit)` writes one STL per part design.
   the nut stands 1 proud of the support, 1 mm under the group's bed face; the nut is the
   spacer and touches only the inner race and the seal. 12 bearings in all for the corner.
   - Driver A + 27T: one part (as the P stack); a collar r 14.7 joins them (A's hub windows
-    start at r 15.2). Seats in the 27T's bed face and A's top face.
+    start at r 15.2). Seats in the 27T's bed face and A's top face. The 27T's own outline
+    also runs on up through the 1 mm to A (`_fill`, hidden `... Stack Fill`): the gap is
+    there to keep A off the 54T, and nothing else ever passes over the 27T, so A does not
+    print hanging 1 mm over it. The fill covers the 27T's rim dots.
   - Driver B: a fluted drum under it (z -57..-48, r 16.5) carries the lower bearing.
   - Star + S gear: one part, joined by a collar r 14.7 in the 1 mm between them; seats in the
-    star's bed face and the S gear's top face.
+    star's bed face and the S gear's top face. The star's outline runs on up to the S gear
+    the same way (the gap only clears the pin and boss tops, which stay outside the star's
+    outline); the star's windows end under it.
   - Each O gear: a drum under it (z -30..-21, r 15) carries the lower bearing.
   - A's and B's upper bearing sits right under the locking boss: the boss gets a seat
     clearance and a 16 x 0.6 relief on its underside (hidden cutters `... Bearing Seat`,
@@ -395,9 +400,17 @@ part's swept volume; `export_stand(unit)` writes one STL per part design.
   bearing short of rod or rub a boss. The nuts sit in hex pockets, so they hold the rods in
   place rather than clamp them (spin a foot nut up snug, then back it off to the nearest flat).
 - Print: floor tiles, keystone, keys, feet, columns and beam need no supports (columns stand
-  on their spigot; the beam prints bed face down). The turning parts that join two gears (P
-  stack, A + 27T, star + S gear) and the drums under B and the O's need supports under the
-  overhang.
+  on their spigot; the beam prints bed face down). The P stack needs supports everywhere
+  (under the P gear, standing on the 54T). The other turning parts need supports from the
+  build plate only: the upper gear's rim stands 9 mm over the bed (A over the 27T, B and the
+  O's over their drums, the S gear over the star).
+- Print list for the corner, all from `cad/export/`, as exported (each lands right way up):
+  - Turning: `Gear_P_Stack_NE`, `Gear_Driver_A_NE`, `Gear_Driver_B_NE`, `Toggle_Star_S_NE`,
+    `Gear_O_56T_R1C4`, `Gear_O_56T_R2C5` (one each).
+  - Stand: `Stand_Floor_Q1_NE` .. `Q4` (one each), `Stand_Keystone_NE`, `Stand_Key_NE` x8,
+    `Stand_Foot_NE` x8, `Stand_Foot_Hub_NE` x4, `Stand_Column_O_NE` x2, `Stand_Column_R_NE`,
+    `Stand_Column_Br_NE` x2, `Stand_Bridge_NE`.
+  - First: `Fit_Coupon_22` (every bearing seat is the 21.9 guess; see "Bearings").
 - Checked: `check_stand` finds nothing within 1.5 mm (rods and nuts left out: they sit in the
   bores on purpose); the rods and nuts stay 2+ mm from every turning part on another axis and
   each nut sits in its pocket without touching the print; the unit's own `check()` still

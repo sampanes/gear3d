@@ -551,7 +551,8 @@ def check(unit):
         bo = f"{n['toggle']} Driver {side}"
         meshing |= {frozenset((n[side], x)) for x in (bo, f"{bo} Pin Post")}
     st = _stack_names(unit)  # printed with the gears they join
-    meshing |= {frozenset(p) for p in ((n["A"], st["A"]), (n["input"], st["A"]), (n["B"], st["B"]),
+    # A's stack carries the 27T's outline up to A (`toggle_stand._fill`), so it meshes the 54T
+    meshing |= {frozenset(p) for p in ((n["A"], st["A"]), (n["input"], st["A"]), (n["p54"], st["A"]), (n["B"], st["B"]),
                                        (n["O1"], st["O1"]), (n["O2"], st["O2"]), (n["out"], st["star"]))}
     for side in "AB":
         bo = f"{n['toggle']} Driver {side}"

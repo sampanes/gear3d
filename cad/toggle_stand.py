@@ -272,6 +272,28 @@ def _drum(z_bot, g_bot, body_r, top_r=DRUM_TOP_R):
     return pts
 
 
+def _fill(name, src, z0, z1, target, shrink=0.998):
+    """src's own outline (its base mesh, before modifiers) stretched to z0..z1 and unioned into
+    target. z0 sits inside src; the outline is scaled by `shrink` about src's axis so no wall
+    lies on one of src's (coplanar walls break the union)."""
+    me = src.data.copy()
+    me.name = name
+    mw = src.matrix_world
+    ax = mw.translation
+    zs = [(mw @ v.co).z for v in me.vertices]
+    lo, hi = min(zs), max(zs)
+    for v in me.vertices:
+        q = mw @ v.co
+        v.co = (ax.x + (q.x - ax.x) * shrink, ax.y + (q.y - ax.y) * shrink, z0 + (q.z - lo) / (hi - lo) * (z1 - z0))
+    ob = _object(name, me, target.users_collection[0])
+    ob.parent = target
+    ob.matrix_parent_inverse = target.matrix_world.inverted()
+    _bool(target, ob, "UNION")
+    ob.hide_render, ob.display_type = True, "BOUNDS"
+    ob.hide_set(True)
+    return ob
+
+
 def stacks(unit):
     """Bearing plugs, collars, drums and boss reliefs for one unit (rebuilt each call)."""
     n = sot._names(unit)
@@ -302,6 +324,13 @@ def stacks(unit):
         g = O[n[key]]
         zg = g.location.z - sot.GEAR_H / 2
         place(f"{g.name} Drum", _drum(zs, zg, DRUM_O_R), g, g.location.xy)
+    # the 1 mm between two joined gears would leave the upper one hanging over the lower with
+    # nothing to print on: the lower gear's own outline fills it (nothing else passes there)
+    bpy.context.view_layer.update()
+    # (the 27T's fill starts 1.5 down, so it fills the rim dots the 27T's top face would hide,
+    # and ends 0.3 up into A, clear of the export's squeezed crossings at A's bed face)
+    _fill(f"{ga.name} Stack Fill", gi, zi + sot.GEAR_H - 1.5, za + 0.3, out[f"{ga.name} Stack"])
+    _fill(f"{star.name} Stack Fill", star, zs + sot.GEAR_H - 0.3, zo, out[f"{star.name} Stack"])
     # the top bearing of A and B sits right under the locking boss: clear its seat and inner race
     for side in "AB":
         bo = O[f"{n['toggle']} Driver {side}"]
