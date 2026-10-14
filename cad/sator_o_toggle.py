@@ -489,6 +489,10 @@ def build_unit(unit):
         decorate(g, "O")
     result["sectors"] = _sector_cut(go, [math.atan2(L[k][1] - L["star"][1], L[k][0] - L["star"][0])
                                          for k in ("O1", "O2")])
+    # bearing plugs, collars and drums (cad/toggle_stand.py): A + 27T and star + S gear become
+    # one part each, B and each O get a drum carrying their second bearing
+    bpy.context.view_layer.update()
+    result["stacks"] = sorted(_load("toggle_stand").stacks(unit))
     return result
 
 
@@ -515,7 +519,8 @@ def _footprints(unit):
     out = []
     names = [n[k] for k in ("A", "B", "input", "p54", "out", "O1", "O2", "P")] + [f"{n['P']} Tube"]
     names += [o.name for o in bpy.data.objects[n["toggle"]].children_recursive
-              if o.type == "MESH" and not o.hide_render]  # star, bosses, pin posts
+              if o.type == "MESH" and not o.hide_render]  # star, bosses, pin posts, star stack
+    names += [nm for nm in _stack_names(unit).values() if nm in bpy.data.objects]
     for name in names:
         ob = bpy.data.objects[name]
         me = ob.evaluated_get(dg).to_mesh()
@@ -545,6 +550,12 @@ def check(unit):
     for side in "AB":  # each boss and pin post is printed with its driver gear
         bo = f"{n['toggle']} Driver {side}"
         meshing |= {frozenset((n[side], x)) for x in (bo, f"{bo} Pin Post")}
+    st = _stack_names(unit)  # printed with the gears they join
+    meshing |= {frozenset(p) for p in ((n["A"], st["A"]), (n["input"], st["A"]), (n["B"], st["B"]),
+                                       (n["O1"], st["O1"]), (n["O2"], st["O2"]), (n["out"], st["star"]))}
+    for side in "AB":
+        bo = f"{n['toggle']} Driver {side}"
+        meshing |= {frozenset((st[side], x)) for x in (bo, f"{bo} Pin Post")}
     toggle = {o.name for o in bpy.data.objects[n["toggle"]].children_recursive}
     for i, (na, pa, ra, a0, a1, rza) in enumerate(parts):
         for nb, pb, rb, b0, b1, rzb in parts[i + 1:]:
@@ -582,21 +593,31 @@ def export_p_stack(unit, path=None):
                                                          bpy.data.objects[n["p54"]]))
 
 
+def _stack_names(unit):
+    n = _names(unit)
+    return dict(A=f"{n['A']} Stack", B=f"{n['B']} Drum", star=f"{n['toggle']} Star Stack",
+                O1=f"{n['O1']} Drum", O2=f"{n['O2']} Drum")
+
+
 def export_toggle_parts(unit, out_dir=None):
-    """The unit's carved Geneva parts, each ONE solid (part-local): the star, the S gear, and
-    each driver (64T + crossings + locking boss + pin post). {name: (path, shells,
+    """The unit's turning parts, each ONE solid (part-local): star + S gear (joined by their
+    bearing plug), driver A (64T + crossings + locking boss + pin post + plug + 27T), driver B
+    (the same with its drum), each O gear with its drum. {name: (path, shells,
     non_manifold)}."""
     n = _names(unit)
+    st = _stack_names(unit)
     sg = _load("sator_gears")
     out_dir = out_dir or os.path.join(_HERE, "export")
     O = bpy.data.objects
-    res = {"Star": sg.export_stl(O[f"{n['toggle']} Star"], os.path.join(out_dir, f"Toggle_Star_{unit}.stl")),
-           "S gear": sg.export_stl(O[n["out"]], os.path.join(out_dir, f"Gear_S_56T_{unit}.stl"))}
+    res = {"Star": sg.export_stl(O[f"{n['toggle']} Star"], os.path.join(out_dir, f"Toggle_Star_S_{unit}.stl"),
+                                 extra=(O[st["star"]], O[n["out"]]))}
     for side in "AB":
         bo = O[f"{n['toggle']} Driver {side}"]
-        res[f"Driver {side}"] = sg.export_stl(
-            O[n[side]], os.path.join(out_dir, f"Gear_Driver_{side}_{unit}.stl"),
-            extra=(bo, O[f"{bo.name} Pin Post"]))
+        extra = (bo, O[f"{bo.name} Pin Post"], O[st[side]]) + ((O[n["input"]],) if side == "A" else ())
+        res[f"Driver {side}"] = sg.export_stl(O[n[side]], os.path.join(out_dir, f"Gear_Driver_{side}_{unit}.stl"),
+                                              extra=extra)
+    for key in ("O1", "O2"):
+        res[n[key]] = sg.export_stl(O[n[key]], os.path.join(out_dir, f"{n[key]}.stl"), extra=(O[st[key]],))
     return res
 
 

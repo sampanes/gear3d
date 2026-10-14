@@ -293,9 +293,11 @@ reports clearances; `layout()` holds the axis positions.
   - S gear: windows as before (toothed arcs, S arms, hub) with the same edges; the arms stand
     2.5 lower than the rims and hub, their top edges rounded, and the rims and hub get a 1.2
     stepped border along the windows.
-  - Exports: `export_toggle_parts(unit)` -> `cad/export/`: `Toggle_Star_<unit>`,
-    `Gear_S_56T_<unit>`, `Gear_Driver_<A|B>_<unit>` (64T + crossings + boss + post as one);
-    each one closed solid; NE and SW match (same volume and extents; not byte-identical).
+  - Exports: `export_toggle_parts(unit)` -> `cad/export/`: `Toggle_Star_S_<unit>` (star +
+    plug + S gear), `Gear_Driver_A_<unit>` (64T + crossings + boss + post + plug + 27T),
+    `Gear_Driver_B_<unit>` (the same with its drum, no 27T), `Gear_O_56T_R<r>C<c>` (O gear +
+    drum); each one closed solid; NE and SW match (same volume and extents; not
+    byte-identical). Bearing stacks: see "O toggle stand" below.
 - P stack: the P 64T (z -12..-4), the 54T (-57..-49) and a tube between them print as ONE part
   (`export_p_stack(unit)` -> `cad/export/Gear_P_Stack_<unit>.stl`; NE and SW are byte-identical,
   so print one design twice). It turns on two 22 mm bearings (608, 8 x 22 x 7, `BEARING_W`) on a
@@ -320,7 +322,7 @@ reports clearances; `layout()` holds the axis positions.
   A/B gears up through it), A/B 64T -48..-40, 27T + 54T -57..-49. The O letters reach the
   letter plane on their own shafts.
 - Star gap: the A/B gears mesh right under the star axis, so the star's rod cannot run down
-  past them; it ends in the gap, held by a bracket fed in sideways (open). In the gap only the
+  past them; it ends in the gap, held by the stand's bridge (below). In the gap only the
   pin posts (collar r 4.5 at r 50.9 round each driver axis) and the bosses inside their
   sweep move: around the star axis the gap is clear to r 16.6 (`check()` ->
   `star_gap_clear_r`), and it opens up away from the axis at right angles to the A-B line
@@ -335,17 +337,68 @@ reports clearances; `layout()` holds the axis positions.
 - Phase: built at t = 0 (mid-dwell before A's push, star 0); every O rests upright or upside
   down at each board quarter turn.
 
+## O toggle stand (`cad/toggle_stand.py`)
+
+A stand that holds one toggle unit's corner on its own, so it can be built and turned by
+hand before the board exists (unit NE: the OPRO corner). `stacks(unit)` adds the bearing
+pieces to the unit (`build_unit` calls it); `stand(unit)` builds the stand in collection
+`Stand <unit>`; `check_stand(unit, clear)` reports any stand part within `clear` of a turning
+part's swept volume; `export_stand(unit)` writes one STL per part design.
+
+- Bearings: every turning group runs on two 608s (8 x 22 x 7) on a fixed M8 rod, one pressed
+  into each outer face of the group (the 21.9 holes the gears already have). A plug between
+  the two seats carries the outer races; a 16 x 0.6 counterbore keeps each inner race clear;
+  the rod hole is 8.6. Each inner race rests on a spacer ring (r 5.5, 1 tall) on top of what
+  holds the rod, 1 mm under the group's bed face. 12 bearings in all for the corner.
+  - Driver A + 27T: one part (as the P stack); a collar r 14.7 joins them (A's hub windows
+    start at r 15.2). Seats in the 27T's bed face and A's top face.
+  - Driver B: a fluted drum under it (z -57..-48, r 16.5) carries the lower bearing.
+  - Star + S gear: one part, joined by a collar r 14.7 in the 1 mm between them; seats in the
+    star's bed face and the S gear's top face.
+  - Each O gear: a drum under it (z -30..-21, r 15) carries the lower bearing.
+  - A's and B's upper bearing sits right under the locking boss: the boss gets a seat
+    clearance and a 16 x 0.6 relief on its underside (hidden cutters `... Bearing Seat`,
+    `... Bearing Relief`).
+- Supports. All eight lie on the compass lines through the star axis: A and B on the A-B line
+  (r 72), the bridge's columns across it (r 87, `BR_D`), P and R on one diagonal, the two O's
+  on the other (r 127.3).
+  - Pedestals under P, A and B (part of the floor tiles): Attic base, top 1 below the bed faces.
+  - Columns (printed apart, a spigot into a floor socket, the rod through them): under each O
+    (shaft r 12.5 with 12 flutes, echinus capital r 17, spacer ring on top; 5+ mm from driver
+    B / A); under the corner R up to the letter plane (z 14, the R sits on it); and the
+    bridge's two (spigot into the beam above).
+  - Bridge: a beam through the star gap (z -39..-31, 1 mm air to the A/B gears below and the
+    star above), waisted round the star to stay 2.5 off the pin posts' sweep (28 wide at the
+    star, 40 at the columns), stepped fasciae on its sides, rivets round each end. The star's
+    rod stands in a nut trap at its centre; each end is clamped down by a nut on its rod.
+    Measured: 1.5 to 2 mm from the pin posts' swept volume, the tightest spot of the stand.
+  - Floor: radius 158 round the star axis, 6 thick (z -68..-62), a compass rose: spokes along
+    the 8 lines, rings at r 80 and r 127.3, a rim 14 wide with rivets, round windows (r 4
+    corners, rounded top edge, bed chamfer) between. Four quadrant tiles (204 x 157, fit the
+    256 bed) with their seams between the spokes, so no support sits on a seam; a keystone
+    (r 36, compass rose in relief, rivets) sits 3 deep over the point where they meet; eight
+    bow-tie keys (3 deep) cross the seams. Bun feet under it, printed apart so the tiles
+    print flat: one under each support holds that rod's nut (trap from below), four smaller
+    ones near the centre peg in.
+- Hardware for the corner (M8 threaded rod, cut lengths, nut at the bottom in each foot): P 71,
+  A 35, B 35, each O 62, R 86, bridge columns 53 (x2, a second nut on top of the beam), star 25
+  (in the bridge's nut trap). 12 x 608 bearings, 11 M8 nuts, 2 steel 4 x 25.7 drive pins.
+- Print: floor tiles, keystone, keys, feet, columns and beam need no supports (columns stand
+  on their spigot; the beam prints bed face down). The turning parts that join two gears (P
+  stack, A + 27T, star + S gear) and the drums under B and the O's need supports under the
+  overhang.
+- Checked: `check_stand` finds nothing within 1.5 mm (rods and nuts left out: they sit in the
+  bores on purpose); the unit's own `check()` still reports no overlaps; every exported part
+  is one closed solid.
+- Not yet: the letters are not fastened (the O's and P float above their gears), and the
+  corner R has no gear (it stands on its column).
+
 ## Open questions
 
 - How the fixed middle gear mounts to the frame (no bearing; solid hub drum, r 15, full 24 mm height).
   Use model: a lazy susan. The middle is fixed to a wall or a base board (the susan's bottom)
   and the whole board turns around it, pushed by hand at the corners; so every other support
   (axles, columns, the toggle units' floor) rides on the turning board.
-- OPRO corner as a standalone test (unit NE, no board): a floor in pieces that join (the
-  corner is ~350 x 350, over the 256 bed), fixed axles for the P stack, A + 27T and B,
-  columns under both O gears and the corner R, and a bridge through the star gap (28 wide
-  along the line through the star at right angles to A-B, a post at each end) holding the
-  star + S gear shaft. The input is turned by hand at P.
 - Idler axle support: lives in the spacer layer (z -4..4), outside the middle spacer
   (radius 68.9); the 96T below sweeps under the idler, so nothing can pass through z < -4 there.
 - Letter-gear tree: which letters chain off which (keep paths short, no closed loops)?
@@ -353,7 +406,6 @@ reports clearances; `layout()` holds the axis positions.
   P, and the O toggle sits on the P -> R path. Idea: a free idler on the star's axis (own
   bearing, own layer) meshing P 64T and R 64T: 49T at module 2.25 spans 127.125 of the needed
   127.28 (0.16 mm loose) -- or shift it like the 56T. R then turns with P (upright).
-- O toggle hardware: shafts and supports for the hanging unit (star + 56T on one shaft, its
-  lower end held by a bracket in the star gap; A + 27T, B; the P stack is settled: 608 bearings on a fixed M8 rod, which still needs its own
-  mounts). Each driver's boss and pin post already export with its 64T (A and B differ: the
-  pin hole sits at a different tooth phase on each).
+- O toggle hardware on the full board: the standalone stand (above) settles every shaft and
+  bearing; on the board the same rods would hang from the turning board instead of standing
+  on a floor.
