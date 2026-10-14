@@ -105,6 +105,11 @@ per half board turn (see "O toggle units" below).
   y = (3 - row) * 180). Two 96T on the same layer cannot sit in orthogonally neighbouring
   cells (180 < 220.5 OD); diagonal neighbours (254.6 mm) clear.
 - Modeled backlash is 0 (teeth touch exactly); printed parts need the fit value from the coupon.
+- Shared meshes: identical copies (crossings, P tubes, rim-dot and hub cutters, the toggle
+  units' carved parts and cutters) share one mesh datablock, so editing one in Edit Mode edits
+  them all. Gear tooth meshes are never shared: PrecisionGears deletes a gear's old mesh when
+  it regenerates the gear. Scripts that rebuild a part delete its old mesh only once nothing
+  else uses it. Sharing took the file from 54 to 30 MB; exports are byte-identical.
 - Letters (collection `Letters`, objects `Ltr_R<row>C<col>_<letter>`, one shared mesh per
   letter `Letter_<X>`): `cad/sator_letters.py` `build_letters()`, one per cell centered on its
   reference rod. Font: Lithos Pro Regular (carved Greek inscription caps, chosen for the

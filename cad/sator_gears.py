@@ -96,7 +96,8 @@ def add_groove(ob, z_center, width, depth_below_root=0.3):
     if old is not None:
         old_me = old.data
         bpy.data.objects.remove(old)
-        bpy.data.meshes.remove(old_me)
+        if old_me.users == 0:  # copies may share one mesh
+            bpy.data.meshes.remove(old_me)
     me = bpy.data.meshes.new(name)
     bm = bmesh.new()
     n = 256
@@ -137,7 +138,8 @@ def add_rim_dots(ob, count=None, dia=2.4, depth=1.2, segments=16, r=None):
     if old is not None:
         old_me = old.data
         bpy.data.objects.remove(old)
-        bpy.data.meshes.remove(old_me)
+        if old_me.users == 0:  # copies may share one mesh
+            bpy.data.meshes.remove(old_me)
     mod = ob.modifiers.get("Rim Dots")
     if count == 0:
         if mod is not None:
@@ -202,7 +204,8 @@ def add_hub_cut(ob, style="flower", depth=3.0, count=None, r_in=None, r_out=None
     for o in [o for o in bpy.data.objects if o.name.startswith(f"{ob.name} Hub Cut")]:
         me = o.data
         bpy.data.objects.remove(o)
-        bpy.data.meshes.remove(me)
+        if me.users == 0:  # copies may share one mesh
+            bpy.data.meshes.remove(me)
     for m in [m for m in ob.modifiers if m.name.startswith("Hub Cut")]:
         ob.modifiers.remove(m)
     if style is None:
