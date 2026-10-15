@@ -154,6 +154,9 @@ per half board turn (see "O toggle units" below).
 
 - `cad/sator_hand_build.blend` and `cad/export/*.stl` are tracked; `.blend1` backups are not.
   Commit the .blend at milestones (each version adds ~5 MB to history).
+- `cad/sator_lab.blend` is a small sandbox (~0.4 MB) for trying ideas before they touch the main
+  file: the SE letters R A A S (same coordinates as the main file) and a keyframed mock of the
+  A swap (Open questions). Build things there first, then port the script to the main file.
 - Blender stores the last Save As folder (an absolute path) inside the .blend. The pre-commit
   hook runs `cad/check_private.py --staged` and blocks a commit that carries one. Fix: point
   every File Browser area back to `//`, then save again.
@@ -251,7 +254,10 @@ reports clearances; `layout()` holds the axis positions.
 - Drive pins are steel (sourced), 4 mm (`PIN_D`; the slots are 4.8 wide, so change it and
   rebuild if the pins differ). Each presses through a 4.1 mm hole (`PIN_FIT` 1.025) in its 64T
   driver gear at r 50.9 and stands up through the gap into the star layer: pin length 25.7 mm
-  (gear bottom z -48 to 0.3 below the star top; a stock 4 x 25 stops 1 below it). It is held
+  (gear bottom z -48 to 0.3 below the star top; a stock 4 x 25 stops 1 below it). The rods on
+  hand are 4 x 30: driver B takes one uncut (nothing under B down to z -54, so 4.3 mm hangs
+  below its gear), but driver A must be cut to 25.7 (the P stack's 54T is 1 mm under A's gear
+  and sweeps the pin circle; the 56T gears are 1.3 mm over the pin top). It is held
   for 17 of that by the gear and the pin post (below). Grey `Pin` objects in each unit's
   collection are stand-ins (not exported).
 - A and B sit on the grid line through the star (A at (269.3, 198.0), B at (270.7, 342.0) for
@@ -445,6 +451,16 @@ part's swept volume; `export_stand(unit)` writes one STL per part design.
   P, and the O toggle sits on the P -> R path. Idea: a free idler on the star's axis (own
   bearing, own layer) meshing P 64T and R 64T: 49T at module 2.25 spans 127.125 of the needed
   127.28 (0.16 mm loose) -- or shift it like the 56T. R then turns with P (upright).
+- A swap (SE and NW corners, R A / A S): the two A's sit on a diagonal round the block center,
+  like the O's round the NE star, so one hand pivoted at the block center (127.28 to each A)
+  swaps them with a half turn. Lift, swing, drop: the hand rides a closed ramp slot on a
+  board-fixed sleeve, so the lift is tied to the swing angle (6 mm up over the first 35 deg,
+  down over the last 35; at letter height the A's bounding box first meets R's or S's at
+  ~46 deg). The hand has to be in front of the letters: its path crosses the R and S axes, so
+  behind them it would hit their mounts. The A's stay upright on 1:1 belts (or idler gears)
+  from a center pulley that turns like a letter gear (-board angle). Swing drive: a copy of
+  the O toggle (push, dwell, return) with 2:1 up to the hand gives 0 -> 180 -> 0, one swap
+  per quarter board turn. Mock-up in `cad/sator_lab.blend` (motion only, no mechanism yet).
 - O toggle hardware on the full board: the standalone stand (above) settles every shaft and
   bearing; on the board the same rods would hang from the turning board instead of standing
   on a floor.
