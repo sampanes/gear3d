@@ -364,6 +364,14 @@ part's swept volume; `export_stand(unit)` writes one STL per part design.
   what holds the rod (13.3 across flats, open at the top, floor 6.5 under the bed face), so
   the nut stands 1 proud of the support, 1 mm under the group's bed face; the nut is the
   spacer and touches only the inner race and the seal. 12 bearings in all for the corner.
+  Checked (solid/empty profile at r 10.6 and r 11.4 round each NE axis): all 12 seats are
+  open 7 to 7.25 deep with wall all round; the thinnest wall is 4.05 (O drums, r 15 round
+  the 21.9 seat), so press those bearings in square and slowly.
+  Rod play: M8 threaded rod is typically 7.8 to 7.9 over the thread crests, under the 608's
+  8.0 bore. A, B, the star and the O's have their two bearings only 10 apart, so 0.1 of play
+  each way could rock a gear about 1 deg (about 1 mm at the rim). Measure the rod; if a group
+  rocks, wrap one layer of thin tape (polyimide or foil) round the rod at each bearing. Too
+  thin to print.
   - Driver A + 27T: one part (as the P stack); a collar r 14.7 joins them (A's hub windows
     start at r 15.2). Seats in the 27T's bed face and A's top face. The 27T's own outline
     also runs on up through the 1 mm to A (`_fill`, hidden `... Stack Fill`): the gap is
