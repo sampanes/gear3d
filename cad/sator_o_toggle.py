@@ -604,7 +604,7 @@ def _stack_names(unit):
 def export_toggle_parts(unit, out_dir=None):
     """The unit's turning parts, each ONE solid (part-local): star + S gear (joined by their
     bearing plug), driver A (64T + crossings + locking boss + pin post + plug + 27T), driver B
-    (the same with its drum), each O gear with its drum. {name: (path, shells,
+    (the same with its drum), one O gear with its drum (both O's are alike). {name: (path, shells,
     non_manifold)}."""
     n = _names(unit)
     st = _stack_names(unit)
@@ -618,8 +618,8 @@ def export_toggle_parts(unit, out_dir=None):
         extra = (bo, O[f"{bo.name} Pin Post"], O[st[side]]) + ((O[n["input"]],) if side == "A" else ())
         res[f"Driver {side}"] = sg.export_stl(O[n[side]], os.path.join(out_dir, f"Gear_Driver_{side}_{unit}.stl"),
                                               extra=extra)
-    for key in ("O1", "O2"):
-        res[n[key]] = sg.export_stl(O[n[key]], os.path.join(out_dir, f"{n[key]}.stl"), extra=(O[st[key]],))
+    # the unit's two O gears (with their drums) are the same part: one file, print two
+    res["O"] = sg.export_stl(O[n["O1"]], os.path.join(out_dir, f"Gear_O_56T_{unit}_x2.stl"), extra=(O[st["O1"]],))
     return res
 
 

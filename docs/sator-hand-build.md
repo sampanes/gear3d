@@ -142,12 +142,17 @@ per half board turn (see "O toggle units" below).
   (the result is still one closed shell; the first P stack export lost its 54T and the first
   star + S gear export lost its star) or tear the result. So the export checks that points
   just inside every piece lie inside the solid, and tries other orders until one passes.
+  Triangulating the union can leave zero-volume flaps (two triangles on the same three points,
+  back to back or as zero-area slivers 0.1 um off their neighbours) lying in a flat face; the
+  slicer ignores them but the file is then not a clean solid (4 faces on an edge). The export
+  collapses edges under 0.2 um and deletes such pairs, so every file is one watertight body.
 - Never slice a hand export of gear + crossings: those are two shells. The slicer treats each
   shell as a part and gives both perimeters, so the 1 mm overlap prints as a seam of walls
   instead of bonded infill (weak ring where the spokes meet the rim).
-- Identical gears share one STL: `Gear_96T.stl` (all 96T), `Gear_Letter_64T_N.stl` (front
-  letters), `Gear_Letter_64T_N2.stl` (far letters), `Gear_Idler_16T_N.stl` (all idlers).
-  Print as many as the scene has.
+- Identical parts share one STL whose name ends in how many to print: `Gear_96T_x4`,
+  `Gear_Letter_64T_Front_x4`, `Gear_Letter_64T_Far_x4`, `Gear_Idler_16T_x4`, plus
+  `Gear_Middle_64T` (`sator_gears.export_board()`, names in `BOARD_PRINTS`); the toggle and
+  stand parts the same way (`Gear_O_56T_NE_x2`, `Stand_Foot_NE_x8`, ...). No suffix: print one.
 - Re-export after changing a gear or its crossings; the STLs do not update themselves.
 
 ## Repo hygiene for the binaries
@@ -311,8 +316,8 @@ reports clearances; `layout()` holds the axis positions.
     stepped border along the windows.
   - Exports: `export_toggle_parts(unit)` -> `cad/export/`: `Toggle_Star_S_<unit>` (star +
     plug + S gear), `Gear_Driver_A_<unit>` (64T + crossings + boss + post + plug + 27T),
-    `Gear_Driver_B_<unit>` (the same with its drum, no 27T), `Gear_O_56T_R<r>C<c>` (O gear +
-    drum); each one closed solid; NE and SW match (same volume and extents; not
+    `Gear_Driver_B_<unit>` (the same with its drum, no 27T), `Gear_O_56T_<unit>_x2` (O gear +
+    drum; the unit's two O's are the same part); each one closed solid; NE and SW match (same volume and extents; not
     byte-identical). Bearing stacks: see "O toggle stand" below.
 - P stack: the P 64T (z -12..-4), the 54T (-57..-49) and a tube between them print as ONE part
   (`export_p_stack(unit)` -> `cad/export/Gear_P_Stack_<unit>.stl`; NE and SW are byte-identical,
@@ -441,10 +446,10 @@ part's swept volume; `export_stand(unit)` writes one STL per part design.
   O's over their drums, the S gear over the star).
 - Print list for the corner, all from `cad/export/`, as exported (each lands right way up):
   - Turning: `Gear_P_Stack_NE`, `Gear_Driver_A_NE`, `Gear_Driver_B_NE`, `Toggle_Star_S_NE`,
-    `Gear_O_56T_R1C4`, `Gear_O_56T_R2C5` (one each).
-  - Stand: `Stand_Floor_Q1_NE` .. `Q4` (one each), `Stand_Keystone_NE`, `Stand_Key_NE` x8,
-    `Stand_Foot_NE` x8, `Stand_Foot_Hub_NE` x4, `Stand_Column_O_NE` x2, `Stand_Column_R_NE`,
-    `Stand_Column_Br_NE` x2, `Stand_Bridge_NE`.
+    `Gear_O_56T_NE_x2` (one each, two of the O gear).
+  - Stand: `Stand_Floor_Q1_NE` .. `Q4` (one each), `Stand_Keystone_NE`, `Stand_Key_NE_x8`,
+    `Stand_Foot_NE_x8`, `Stand_Foot_Hub_NE_x4`, `Stand_Column_O_NE_x2`, `Stand_Column_R_NE`,
+    `Stand_Column_Br_NE_x2`, `Stand_Bridge_NE` (the suffix is the count).
   - Bearing seats are 21.9, settled with `Fit_Coupon_22` (see "Bearings").
 - Checked: `check_stand` finds nothing within 1.5 mm (rods and nuts left out: they sit in the
   bores on purpose); the rods and nuts stay 2+ mm from every turning part on another axis and

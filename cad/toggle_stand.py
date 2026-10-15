@@ -888,13 +888,14 @@ def export_stand(unit="NE", out_dir=None):
     for ob in sorted((o for o in col.objects if o.parent is None and "reference" not in o.keys()), key=lambda o: o.name):
         short = ob.name[len(pre):].replace(" ", "_")
         # one file per design: the 8 keys, the 2 O columns, the 2 bridge columns, the support
-        # feet and the centre feet are each alike
-        for stem, keep in (("Key_", "Key_1i"), ("Column_O", "Column_O1"), ("Column_Br", "Column_BrE"),
-                           ("Foot_Hub_", "Foot_Hub_1"), ("Foot_", "Foot_P")):
+        # feet and the centre feet are each alike; the file name ends in how many to print
+        count = ""
+        for stem, keep, n in (("Key_", "Key_1i", 8), ("Column_O", "Column_O1", 2), ("Column_Br", "Column_BrE", 2),
+                              ("Foot_Hub_", "Foot_Hub_1", 4), ("Foot_", "Foot_P", 8)):
             if short.startswith(stem):
-                short = stem.rstrip("_") if short == keep else None
+                short, count = (stem.rstrip("_") if short == keep else None), f"_x{n}"
                 break
         if short is None:
             continue
-        res[short] = sg.export_stl(ob, os.path.join(out_dir, f"Stand_{short}_{unit}.stl"))
+        res[short] = sg.export_stl(ob, os.path.join(out_dir, f"Stand_{short}_{unit}{count}.stl"))
     return res

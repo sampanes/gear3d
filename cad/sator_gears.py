@@ -412,6 +412,24 @@ def _missing(bm_world, probes, tol=0.1):
     return out
 
 
+def _drop_back_to_back(bm):
+    """Delete pairs of triangles on the same three vertices (a zero-volume flap).
+
+    Triangulating an EXACT n-gon that wraps round a hole can leave such a pair lying in a
+    flat face (back to back, or two zero-area slivers): no volume, but every edge of it then
+    has 4 faces, so the STL is not a clean solid. Returns how many faces were removed."""
+    seen, dup = {}, []
+    for f in bm.faces:
+        k = frozenset(f.verts)
+        if len(k) == 3 and k in seen:
+            dup += [f, seen.pop(k)]
+        else:
+            seen[k] = f
+    if dup:
+        bmesh.ops.delete(bm, geom=dup, context="FACES")
+    return len(dup)
+
+
 def export_stl(gear, path=None, extra=(), tries=24):
     """Union a gear with its crossings into ONE solid and write a binary STL.
 
@@ -483,6 +501,10 @@ def export_stl(gear, path=None, extra=(), tries=24):
         bmesh.ops.triangulate(bm, faces=bm.faces[:])
         # EXACT can leave a few vertices a hair apart (< 1e-5) where they should be one
         bmesh.ops.remove_doubles(bm, verts=bm.verts[:], dist=1e-5)
+        # and zero-area slivers with an edge just over that: collapse edges under 0.2 um
+        bmesh.ops.dissolve_degenerate(bm, dist=2e-4, edges=bm.edges[:])
+        bmesh.ops.triangulate(bm, faces=bm.faces[:])
+        _drop_back_to_back(bm)
         world = bm.copy()
         world.transform(mw)
         if first is not base:
@@ -526,6 +548,26 @@ def export_stl(gear, path=None, extra=(), tries=24):
             f.write(b"\0\0")
     bm.free()
     return path, shells, non_manifold, missing
+
+
+# Identical board gears share one STL; the name ends in how many the board needs.
+BOARD_PRINTS = {
+    "Gear_Middle_64T": "Gear_Middle_64T",
+    "Gear_96T": "Gear_96T_x4",
+    "Gear_Idler_16T_N": "Gear_Idler_16T_x4",
+    "Gear_Letter_64T_N": "Gear_Letter_64T_Front_x4",
+    "Gear_Letter_64T_N2": "Gear_Letter_64T_Far_x4",
+}
+
+
+def export_board(out_dir=None):
+    """The board's own gears (not the toggle units), one STL per design. {file: (path,
+    shells, non_manifold, missing)}."""
+    import os
+
+    out_dir = out_dir or os.path.join(os.path.dirname(os.path.abspath(__file__)), "export")
+    return {f: export_stl(bpy.data.objects[ob], os.path.join(out_dir, f + ".stl"))
+            for ob, f in BOARD_PRINTS.items()}
 
 
 def tooth_phase(ob):
