@@ -171,7 +171,7 @@ holds the bearing in).
 
 | Bearing OD | Modeled hole dia | Suggested use | Notes |
 | --- | --- | --- | --- |
-| 16 mm | 16.0 mm | 16T idlers | a 22 mm-class hole would leave only ~4 mm to a 16T root; 16.0 leaves ~7.2 mm |
+| 16 mm (5 mm bore, likely 625: 5 x 16 x 5) | 16.0 mm | 16T idlers (full board only; the corner kit is all 608) | a 22 mm-class hole would leave only ~4 mm to a 16T root; 16.0 leaves ~7.2 mm |
 | 22 mm | 21.9 mm | 64T letter gears, 96T gears | needs hub radius >= ~16 mm (5 mm wall) |
 
 Fit coupons (`sator_gears.fit_coupon`, collection `Test Prints`, exported as
@@ -257,7 +257,11 @@ reports clearances; `layout()` holds the axis positions.
   (gear bottom z -48 to 0.3 below the star top; a stock 4 x 25 stops 1 below it). The rods on
   hand are 4 x 30: driver B takes one uncut (nothing under B down to z -54, so 4.3 mm hangs
   below its gear), but driver A must be cut to 25.7 (the P stack's 54T is 1 mm under A's gear
-  and sweeps the pin circle; the 56T gears are 1.3 mm over the pin top). It is held
+  and sweeps the pin circle; the 56T gears are 1.3 mm over the pin top). Use the 4 x 25 dowels
+  in both drivers instead: no cutting. Press each so its bottom is flush with the driver
+  gear's bed face (z -48, top at -23, 1.0 under the star top, so 7 of the star's 8 mm is
+  engaged; still held 17 by the gear and post). On A it must never stand below the bed face
+  (54T 1 mm under); pushed the other way it may sit up to 0.7 inside the hole. It is held
   for 17 of that by the gear and the pin post (below). Grey `Pin` objects in each unit's
   collection are stand-ins (not exported).
 - A and B sit on the grid line through the star (A at (269.3, 198.0), B at (270.7, 342.0) for
