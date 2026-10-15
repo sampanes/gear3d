@@ -64,6 +64,7 @@ NUT_AF = 13.0            # M8 nut across flats / height
 NUT_H = 6.5
 TRAP_AF = NUT_AF + 0.3
 TRAP_H = NUT_H + 0.3
+END_BAND = 0.4           # _fill(straight=True): height each squeezed end chamfer takes
 ACORN_H = 15.0           # M8 acorn (dome) nut on top of each bridge end (DIN 1587)
 # ==== stacks ====
 COLLAR_R = 14.7          # joins A to its 27T and the star to its S gear (A's hub windows start at 15.2)
@@ -301,20 +302,37 @@ def _wall_cutter(name, src, ring_a, ring_b, t, z0, z1):
     return _hidden(_object(name, me, src.users_collection[0]))
 
 
-def _fill(name, src, z0, z1, target, shrink=0.998, cuts=()):
+def _fill(name, src, z0, z1, target, shrink=0.998, cuts=(), straight=False):
     """src's own outline (its base mesh, before modifiers) stretched to z0..z1 and unioned into
     target. z0 sits inside src; the outline is scaled by `shrink` about src's axis so no wall
     lies on one of src's (coplanar walls break the union). `cuts`: cutters taken out of the
-    fill before the union (each parented to the fill)."""
+    fill before the union (each parented to the fill). `straight`: see below."""
     me = src.data.copy()
     me.name = name
     mw = src.matrix_world
     ax = mw.translation
     zs = [(mw @ v.co).z for v in me.vertices]
     lo, hi = min(zs), max(zs)
+    # straight: src's end chamfers are the bands below / above where its outline first / last
+    # reaches full size. Only the straight band between them is stretched to z0..z1; each
+    # chamfer is squeezed into END_BAND just outside it, inside the parts it joins. Stretching
+    # the whole outline left the fill's own chamfer beside src's chamfered teeth: a V groove
+    # round every tooth (the 27T, whose teeth end in 1.5 mm chamfers).
+    rs = [(mw @ v.co - ax).xy.length for v in me.vertices]
+    full = max(rs) * 0.999
+    zf = [z for z, r in zip(zs, rs) if r >= full]
+    a, b = (min(zf), max(zf)) if straight else (lo, hi)
+
+    def zmap(z):
+        if z < a:
+            return z0 - END_BAND * (a - z) / (a - lo)
+        if z > b:
+            return z1 + END_BAND * (z - b) / (hi - b)
+        return z0 + (z - a) / max(b - a, 1e-9) * (z1 - z0)
+
     for v in me.vertices:
         q = mw @ v.co
-        v.co = (ax.x + (q.x - ax.x) * shrink, ax.y + (q.y - ax.y) * shrink, z0 + (q.z - lo) / (hi - lo) * (z1 - z0))
+        v.co = (ax.x + (q.x - ax.x) * shrink, ax.y + (q.y - ax.y) * shrink, zmap(q.z))
     ob = _object(name, me, target.users_collection[0])
     ob.parent = target
     ob.matrix_parent_inverse = target.matrix_world.inverted()
@@ -363,7 +381,7 @@ def stacks(unit):
     bpy.context.view_layer.update()
     # (the 27T's fill starts 1.5 down, so it fills the rim dots the 27T's top face would hide,
     # and ends 0.3 up into A, clear of the export's squeezed crossings at A's bed face)
-    _fill(f"{ga.name} Stack Fill", gi, zi + sot.GEAR_H - 1.5, za + 0.3, out[f"{ga.name} Stack"])
+    _fill(f"{ga.name} Stack Fill", gi, zi + sot.GEAR_H - 1.5, za + 0.3, out[f"{ga.name} Stack"], straight=True)
     # (the star's ends 1 up into the S gear: at its bed face, or 0.3 to 0.5 above it, the union
     # leaves slivers where it meets the S gear's cut-away sector)
     # Both layers are windowed, so the fill keeps both sets of windows open: the star's at

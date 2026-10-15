@@ -380,7 +380,10 @@ part's swept volume; `export_stand(unit)` writes one STL per part design.
     start at r 15.2). Seats in the 27T's bed face and A's top face. The 27T's own outline
     also runs on up through the 1 mm to A (`_fill`, hidden `... Stack Fill`): the gap is
     there to keep A off the 54T, and nothing else ever passes over the 27T, so A does not
-    print hanging 1 mm over it. The fill covers the 27T's rim dots.
+    print hanging 1 mm over it. The fill covers the 27T's rim dots. Its sides run straight
+    from 1.5 down in the 27T to 0.3 up in A (`_fill(..., straight=True)`): the 27T's teeth end
+    in 1.5 mm chamfers, and a fill stretched with its own chamfers left a V groove round every
+    tooth top; now its chamfers are squeezed into 0.4 (`END_BAND`) inside the 27T and A.
   - Driver B: a fluted drum under it (z -57..-48, r 16.5) carries the lower bearing.
   - Star + S gear: one part, joined by a collar r 14.7 in the 1 mm between them; seats in the
     star's bed face and the S gear's top face. The star's outline runs on up to the S gear
