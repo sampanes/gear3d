@@ -256,6 +256,19 @@ reports clearances; `layout()` holds the axis positions.
   carries a pin and locking boss) -> star -> 56T on the star shaft meshes both O 56T gears 1:1.
 - Toggle: `toggle(90, 72, land=7.8, bore_d=21.9)`: star R 50.9 (102 mm across), crank 50.9,
   pin 4, lock play 3.65 / 0.5 deg (same as the printed rig).
+- Slot mouths are cut back 3 mm at about 45 deg each side (`MOUTH_FLARE`, `flare=` in
+  `geneva_math`): a funnel, so a pin that arrives off the slot slides in instead of catching on
+  a square corner. In a dwell the star can drift up to the 3.65 deg lock play, which puts the
+  pin up to 3.24 mm off the slot axis at the rim. The 10.8 mm mouth still lands it on the cut.
+  A straight cut rather than a fillet: a fillet meets the rim tangentially, so a pin landing near
+  its outer end pushes almost straight down the slot and can jam. Cost: the land beside each
+  slot drops from 7.8 to 4.8. The pin rides the cut, not the straight wall, for the first
+  3.4 deg of driver turn, during which the ideal star turns only 0.11 deg (0.1 mm at the rim,
+  inside the 0.4 slot gap). Lock play and every `check()` clearance are unchanged. The locking
+  discs are carved from the square-mouthed star (`star_loops(bare=True)`): the flare only
+  takes star material away, so they still clear it, and the drivers stay as they were (carved
+  from the flared star they gained up to 0.11 mm, and that alone broke the drivers' EXACT
+  export union, ~3950 open edges).
 - Drive pins are steel (sourced), 4 mm (`PIN_D`; the slots are 4.8 wide, so change it and
   rebuild if the pins differ). Each presses through a 4.1 mm hole (`PIN_FIT` 1.025) in its 64T
   driver gear at r 50.9 and stands up through the gap into the star layer: pin length 25.7 mm

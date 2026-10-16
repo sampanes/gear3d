@@ -13,7 +13,12 @@ While a pin is in its slot the star turns with the pin's direction from the star
   star = atan2(sin(amp) * sin(t), 1 - sin(amp) * cos(t))   (t = driver turn from mid-push)
 so it starts and stops with zero speed. Between pushes each driver's locking disc rides in a
 concave pocket on the star, centred where that driver's axis sits at rest; `land` sets how much
-rim is left beside each slot mouth (the pocket radius follows from it).
+rim is left beside each slot mouth (the pocket radius follows from it). `flare` cuts each
+slot mouth corner back at about 45 deg (mm across the slot and down the wall) into a funnel, so
+a pin that arrives off the slot (the star drifted within its lock play) slides in instead of
+catching on a sharp corner. A straight cut, not a fillet: a fillet meets the rim tangentially,
+so a pin landing near its outer end pushes almost straight along the slot and can jam. The land
+shrinks; the pockets and the lock stay as they are.
 
 Slots and pockets are lists of star-frame angles, so one code path makes:
   index(n)       plain Geneva: n slots, one driver (pins=2 indexes twice per driver turn)
@@ -53,11 +58,11 @@ class Driver:
 
 class Drive:
     def __init__(self, amp, c, slots, pockets, drivers, pin_d=4.0, gap=0.4, land=3.0,
-                 trim=0.0, bore_d=0.0, plate_r=None, kind="custom", seg=24):
+                 trim=0.0, bore_d=0.0, plate_r=None, kind="custom", seg=24, flare=0.0):
         self.amp, self.c = amp, c
         self.slots, self.pockets, self.drivers = list(slots), list(pockets), list(drivers)
         self.pin_d, self.gap, self.land, self.trim, self.bore_d = pin_d, gap, land, trim, bore_d
-        self.kind, self.seg = kind, seg
+        self.kind, self.seg, self.flare = kind, seg, flare
         self.a = c * math.sin(amp)
         self.R = c * math.cos(amp) - trim
         self.gamma = math.pi / 2 - amp
@@ -65,6 +70,11 @@ class Drive:
         self.bottom = c - self.a - pin_d / 2 - gap  # slot floor: deepest pin edge plus gap
         self.mouth = math.asin(self.w / self.R)  # slot half-width as an angle at the rim
         self.delta = amp - self.mouth - land / self.R  # pocket half-width at the rim
+        # mouth chamfer: from the rim, flare out from the slot wall, to the wall, flare down it
+        self.flare_u = math.sqrt(self.R ** 2 - self.w ** 2) - flare  # where the straight wall starts
+        self.mouth_out = math.asin((self.w + flare) / self.R)  # half-angle where the rim ends
+        if self.mouth_out + 1e-9 >= self.amp - self.delta:
+            raise ValueError(f"flare {flare} eats the whole land beside the slot")
         if self.delta <= 0:
             raise ValueError(f"land {land} leaves no pocket (amp too small for this pin/land)")
         R, d = self.R, self.delta
@@ -143,12 +153,14 @@ class Drive:
 
     # ---- outlines ---------------------------------------------------------------------------
 
-    def star_loops(self):
-        """[outer] or [outer, bore] as (N, 2) arrays, star frame (angle 0 = cycle start pose)."""
+    def star_loops(self, bare=False):
+        """[outer] or [outer, bore] as (N, 2) arrays, star frame (angle 0 = cycle start pose).
+        bare: square slot mouths (no flare)."""
         seg, R, w, c = self.seg, self.R, self.w, self.c
+        f = 0.0 if bare else self.flare
         feats = [(s, "slot") for s in self.slots] + [(p, "pocket") for p in self.pockets]
         feats.sort(key=lambda f: f[0] % TAU)
-        half = {"slot": self.mouth, "pocket": self.delta}
+        half = {"slot": self.mouth if bare else self.mouth_out, "pocket": self.delta}
         for (a0, k0), (a1, k1) in zip(feats, feats[1:] + [(feats[0][0] + TAU, feats[0][1])]):
             if (a1 - a0) % TAU < half[k0] + half[k1] - 1e-9 and len(feats) > 1:
                 raise ValueError(f"{k0} at {math.degrees(a0):.1f} and {k1} at {math.degrees(a1):.1f} deg overlap")
@@ -164,13 +176,14 @@ class Drive:
             u = np.array([math.cos(ang), math.sin(ang)])
             v = np.array([-u[1], u[0]])
             if kind == "slot":
-                t = math.sqrt(R * R - w * w)
                 b = self.bottom + w  # centre of the round slot end
-                pts += [u * t - v * w, u * b - v * w]
+                pts += self._mouth(u, v, -1, f)
+                pts += [u * b - v * w]
                 for j in range(1, seg):
                     s = math.pi * j / seg
                     pts.append(u * (b - w * math.sin(s)) - v * (w * math.cos(s)))
-                pts += [u * b + v * w, u * t + v * w]
+                pts += [u * b + v * w]
+                pts += self._mouth(u, v, 1, f)[::-1]
             else:
                 P = c * u
                 e0, e1 = rim(start) - P, rim(ang + self.delta) - P
@@ -190,8 +203,17 @@ class Drive:
                                    for i in range(n)]))
         return loops
 
-    def _dense_star(self, step=0.15):
-        loop = self.star_loops()[0]
+    def _mouth(self, u, v, side, f):
+        """One mouth corner on the given side of the slot (u = slot axis, v across it), from the
+        rim end to where the straight wall starts (one point when there is no flare f)."""
+        R, w = self.R, self.w
+        if f <= 0:
+            return [u * math.sqrt(R * R - w * w) + side * v * w]
+        return [u * math.sqrt(R * R - (w + f) ** 2) + side * v * (w + f),
+                u * (math.sqrt(R * R - w * w) - f) + side * v * w]
+
+    def _dense_star(self, step=0.15, bare=False):
+        loop = self.star_loops(bare)[0]
         out = []
         for p, q in zip(loop, np.roll(loop, -1, 0)):
             n = max(1, int(math.dist(p, q) / step))
@@ -202,7 +224,9 @@ class Drive:
         """Polar radius r[k] (ray k at angle k*TAU/rays, driver frame: pin 0 on +x) per driver."""
         if self._discs is not None:
             return self._discs
-        star = self._dense_star()
+        # carved by the bare star: the flare only takes star material away, so these discs clear
+        # the flared star too, and a flare never changes the drivers
+        star = self._dense_star(bare=True)
         ts = np.arange(steps) / steps * TAU
         stars = [self.star_angle(t) for t in ts]
         out = []
@@ -305,7 +329,7 @@ class Drive:
         return {"kind": self.kind, "amp": self.amp, "c": self.c, "slots": self.slots, "pockets": self.pockets,
                 "drivers": [[d.at, d.sense, d.phase, d.pins] for d in self.drivers], "pin_d": self.pin_d,
                 "gap": self.gap, "land": self.land, "trim": self.trim, "bore_d": self.bore_d,
-                "plate_r": self.plate_r}
+                "plate_r": self.plate_r, "flare": self.flare}
 
     @classmethod
     def from_settings(cls, s):

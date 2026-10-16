@@ -52,6 +52,7 @@ M = 2.25
 SWING = 90.0
 C = 72.0  # star axis to driver axis = pitch radius of the 64T drivers (they mesh at the star axis)
 LAND = 7.8
+MOUTH_FLARE = 3.0  # 45 deg funnel at each slot mouth: covers the star's 3.65 deg lock play (3.2 mm at the rim)
 DRIVER_T, INPUT_T, P_GEAR_T, OUT_T = 64, 27, 54, 56
 BEARING_R = 10.95  # 21.9 hole, the 22 mm bearings
 GEAR_H = 8.0
@@ -438,7 +439,7 @@ def build_unit(unit):
 
     # the toggle: star + the two drivers' locking bosses and pins (standing on the A/B gears)
     drive = gm.toggle(SWING, C, a_deg=L["a_deg"], b_deg=L["b_deg"], land=LAND, bore_d=2 * BEARING_R,
-                      pin_d=PIN_D)
+                      pin_d=PIN_D, flare=MOUTH_FLARE)
     root, star, drivers, result = gv.build(drive, n["toggle"], location=(*L["star"], Z_STAR_BASE),
                                            plate_t=0.0, z_gap=STAR_GAP, pin="steel", collection=n["col"],
                                            chamfer=0.3)  # 0.5 folds over itself at the star's points
