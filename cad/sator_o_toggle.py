@@ -85,10 +85,13 @@ ARM_SWEEP = 70.0   # deg the arm curls between rim and hub
 # (supports under the P gear). A 22 mm bearing (608: 8 x 22 x 7) presses into each outer
 # face; the threaded rod runs through the tube. The tube clears driver A's tooth tips, which
 # pass 16.9 from P's axis.
+# Every turning group's two bearings are clamped by their inner races only: a loose printed
+# spacer (cad/toggle_stand.py) runs between the inner races down a bore through the plug, so
+# tightening the rod's nuts never loads the balls. Each outer race stops on a narrow ledge.
 BEARING_W = 7.0     # bearing seat depth in each outer face
-ROD_HOLE_D = 8.6    # M8 threaded rod clearance
-RELIEF_D = 16.0     # shallow counterbore under each seat: the shoulder misses the inner race
-RELIEF_H = 0.6
+LEDGE_D = 20.0      # each seat stops on a ledge from here out: the outer race only (608 shoulder <= 20)
+RELIEF_H = 0.6      # inside the ledge the plug stands back this far
+SPACER_BORE_D = 13.0  # bore through every plug, round the inner-race spacer (11.5)
 TUBE_EMBED = 1.5    # how far the tube wall reaches into the 54T's hub beside the seat
 # the tube is a little carved column: capital (abacus band + echinus cushion, never steeper
 # than 50 deg so it prints unsupported) under the P gear, a bead at the neck, a fluted shaft
@@ -284,20 +287,20 @@ def _p_tube(p_gear, g54):
     """Column joining the P letter gear to the 54T under it (one printed part).
 
     Each gear's crossings keep their 21.9 bearing hole; the column plugs it below the outer
-    BEARING_W, so the bearing sits on the column's end (a RELIEF_D counterbore keeps the inner
-    race clear) and the rod runs through ROD_HOLE_D. The capital spreads into P's hub; the
-    base stays within TUBE_R, since driver A turns just above the 54T."""
+    BEARING_W, so each bearing's outer race stops on a ledge at the column's end (LEDGE_D out)
+    and the inner-race spacer runs down SPACER_BORE_D through it. The capital spreads into
+    P's hub; the base stays within TUBE_R, since driver A turns just above the 54T."""
     p_top, p_bot = p_gear.location.z + GEAR_H / 2, p_gear.location.z - GEAR_H / 2
     g_top = g54.location.z + GEAR_H / 2
     f_top = p_top - BEARING_W           # top seat floor
     f_bot = g54.location.z - GEAR_H / 2 + BEARING_W  # bottom seat floor
-    seat, relief, rod = BEARING_R + 0.3, RELIEF_D / 2, ROD_HOLE_D / 2
+    seat, ledge, bore = BEARING_R + 0.3, LEDGE_D / 2, SPACER_BORE_D / 2
     col = _column(p_bot, g_top)
     foot = col[-1][0]
-    prof = ([(relief, f_top), (CAP_R, f_top)] + col
-            + [(foot, f_bot - TUBE_EMBED), (seat, f_bot - TUBE_EMBED), (seat, f_bot), (relief, f_bot),
-               (relief, f_bot + RELIEF_H), (rod, f_bot + RELIEF_H), (rod, f_top - RELIEF_H),
-               (relief, f_top - RELIEF_H)])
+    prof = ([(ledge, f_top), (CAP_R, f_top)] + col
+            + [(foot, f_bot - TUBE_EMBED), (seat, f_bot - TUBE_EMBED), (seat, f_bot), (ledge, f_bot),
+               (ledge, f_bot + RELIEF_H), (bore, f_bot + RELIEF_H), (bore, f_top - RELIEF_H),
+               (ledge, f_top - RELIEF_H)])
     z0 = p_gear.location.z
     name = f"{p_gear.name} Tube"
     tube = bpy.data.objects.new(name, _revolve(name, [(p[0], p[1] - z0, *p[2:]) for p in prof],

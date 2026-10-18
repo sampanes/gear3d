@@ -8,17 +8,20 @@ stand(unit)        -- the standalone stand (unit NE is the OPRO corner): a round
                       quadrant tiles and a keystone, pedestals, columns, a bridge through the
                       star gap, bow-tie keys; M8 rods and nuts as grey stand-ins
 check_stand(unit)  -- clearance from every stand part to everything that turns
+check_kit(unit)    -- the same for the rods, nuts, washers and spacers
 export_stand(unit) -- the stand's printed parts as STLs
+export_kit(unit)   -- the printed washers and spacers (with spacers to tune the fit)
 
 Every turning group runs on two 608 bearings (8 x 22 x 7) on a fixed M8 threaded rod, one
 bearing pressed into each outer face of the group (the 21.9 holes the gears already have).
-A plug between the two seats carries each bearing's outer race; a counterbore keeps the inner
-race clear. Each inner race rests on a hex nut sunk in a pocket at the top of whatever holds
-the rod, standing 1 proud as the spacer (it touches only the inner race and the seal).
+Each outer race stops on a narrow ledge of the plug between the two seats; a loose printed
+spacer runs down a bore through the plug from inner race to inner race. The group is clamped
+between a thin nut under it and a thin nut over it, each on a printed washer, so the clamp
+runs through the inner races and the spacer only: never through the balls, never on a seal.
 
 Every fixed part hangs off the floor: each rod runs from a nut in a trap under its foot up
 through a nut in a pocket at the top of its support, so foot, tile and support stay on the
-rod when the stand is lifted; the star's rod hangs from its nut in the bridge's top. The
+rod when the stand is lifted; the star's rod stands in a closed nut trap inside the bridge. The
 supports all lie on the eight compass lines through the star axis: A and B on the A-B line,
 the bridge's columns across it, P and R on one diagonal, the O's on the other. So the floor is a compass rose: spokes along those lines,
 two rings through the supports, a rim; four quadrant tiles meeting under the star (seams
@@ -54,16 +57,23 @@ carve = _load("carve")
 BEARING_W = 7.0          # 608: 8 x 22 x 7, pressed into the gears' 21.9 holes
 BEARING_R = sot.BEARING_R
 SEAT_R = BEARING_R + 0.3  # plugs reach this far into the part's wall (no shared wall)
-RELIEF_R = 8.0           # counterbore over the inner race (608 inner ring is ~12 across)
-RELIEF_H = 0.6
-ROD_HOLE_R = sot.ROD_HOLE_D / 2  # turning parts: clearance round the rod
+LEDGE_R = sot.LEDGE_D / 2  # each outer race stops on a ledge from here out to the seat
+RELIEF_H = sot.RELIEF_H  # inside the ledge the plug stands back this far
+BORE_R = sot.SPACER_BORE_D / 2  # through every plug, round the inner-race spacer
 ROD_FIT_R = 4.15         # fixed parts: snug on the rod
 ROD_R = 4.0
-SPACER_H = 1.0           # a nut stands this far proud of each support, under the inner race
+SPACER_H = 1.0           # each support's top stands this far under its group's bed face
 NUT_AF = 13.0            # M8 nut across flats / height
 NUT_H = 6.5
+THIN_H = 4.0             # thin M8 nut (DIN 439 / ISO 4035): the nut under and over each group
 TRAP_AF = NUT_AF + 0.3
 TRAP_H = NUT_H + 0.3
+# ==== bearing kit (printed, loose): every clamp runs through the inner races only ====
+KIT_R = 5.75             # washers and spacers: inside a 608's inner ring (~12.1 across), off its seal
+KIT_BORE_R = 4.2         # on the rod
+KIT_CHAMFER = 0.3
+WASHER_T = NUT_H - THIN_H  # a thin nut in a pocket cut for a full one, plus this, reaches the bed face
+STAR_FLOOR = 2.2         # under the bridge's closed nut trap (the rod stands on it)
 END_BAND = 0.4           # _fill(straight=True): height each squeezed end chamfer takes
 ACORN_H = 15.0           # M8 acorn (dome) nut on top of each bridge end (DIN 1587)
 # ==== stacks ====
@@ -110,6 +120,7 @@ GRID = 0.5
 SEGS = 256
 SUPPORT_COL = (0.28, 0.42, 0.62, 1)
 HW_COL = (0.3, 0.3, 0.32, 1)
+KIT_COL = (0.85, 0.85, 0.8, 1)
 
 
 # ---- small geometry helpers -------------------------------------------------------------------
@@ -242,12 +253,12 @@ def _hidden(ob):
 def _plug(f_bot, f_top, collar=None):
     """(r, z) loop of the plug between two bearing seats (floors f_bot < f_top); collar
     (z0, z1, r) widens it where two gears meet."""
-    pts = [(RELIEF_R, f_bot), (SEAT_R, f_bot)]
+    pts = [(LEDGE_R, f_bot), (SEAT_R, f_bot)]
     if collar is not None:
         z0, z1, r = collar
         pts += [(SEAT_R, z0), (r, z0), (r, z1), (SEAT_R, z1)]
-    pts += [(SEAT_R, f_top), (RELIEF_R, f_top), (RELIEF_R, f_top - RELIEF_H), (ROD_HOLE_R, f_top - RELIEF_H),
-            (ROD_HOLE_R, f_bot + RELIEF_H), (RELIEF_R, f_bot + RELIEF_H)]
+    pts += [(SEAT_R, f_top), (LEDGE_R, f_top), (LEDGE_R, f_top - RELIEF_H), (BORE_R, f_top - RELIEF_H),
+            (BORE_R, f_bot + RELIEF_H), (LEDGE_R, f_bot + RELIEF_H)]
     return pts
 
 
@@ -268,9 +279,9 @@ def _drum(z_bot, g_bot, body_r, top_r=DRUM_TOP_R):
         pts.append((body_r - 0.6, z, w))
     pts += _arc(body_r - 0.6, g_bot - 1.9, 0.7, -90, 90)[1:]           # bead
     pts += [(top_r, g_bot - 1.0), (top_r, g_bot + 0.5)]               # neck, into the gear
-    pts += [(SEAT_R, g_bot + 0.5), (SEAT_R, f_top), (RELIEF_R, f_top), (RELIEF_R, f_top - RELIEF_H),
-            (ROD_HOLE_R, f_top - RELIEF_H), (ROD_HOLE_R, f_bot + RELIEF_H), (RELIEF_R, f_bot + RELIEF_H),
-            (RELIEF_R, f_bot), (BEARING_R, f_bot)]
+    pts += [(SEAT_R, g_bot + 0.5), (SEAT_R, f_top), (LEDGE_R, f_top), (LEDGE_R, f_top - RELIEF_H),
+            (BORE_R, f_top - RELIEF_H), (BORE_R, f_bot + RELIEF_H), (LEDGE_R, f_bot + RELIEF_H),
+            (LEDGE_R, f_bot), (BEARING_R, f_bot)]
     return pts
 
 
@@ -719,8 +730,25 @@ def stand(unit="NE"):
         _bool(beam, rv, "UNION")
         rv.hide_render, rv.display_type = True, "BOUNDS"
         rv.hide_set(True)
-    for c in (_nut_pocket(f"{name} Nut Pocket", col, sx, sy, nut_tops["Star"]),
-              _object(f"{name} Rod Hole", _cyl("rod hole", ROD_FIT_R, bz0 - 1, bz1 + SPACER_H + 1, 32), col, location=(sx, sy, 0.0))):
+    # the star's rod: nothing can reach under the bridge (1 mm to the A/B mesh), so its nut is
+    # trapped inside the beam, slid in sideways before the bridge goes on. The rod stands on
+    # the trap's floor; the roof over the nut, and a boss on it under the star's inner race,
+    # take the clamp, so the star can lift neither off the rod nor the rod out of the beam.
+    t0 = bz0 + STAR_FLOOR
+    t1 = t0 + THIN_H + 0.3
+    boss = _object(f"{name} Star Boss", _revolve("star boss", [(ROD_FIT_R, bz1 - 0.5), (KIT_R, bz1 - 0.5), (KIT_R, nut_tops["Star"]),
+                                                              (ROD_FIT_R, nut_tops["Star"])], 64, 0), col, location=(sx, sy, 0.0))
+    boss.parent = beam
+    _bool(beam, boss, "UNION")
+    boss.hide_render, boss.display_type = True, "BOUNDS"
+    boss.hide_set(True)
+    trap = _object(f"{name} Nut Trap", _hex("nut trap", TRAP_AF, t0, t1), col, location=(sx, sy, 0.0))
+    trap.rotation_euler.z = e - math.pi / 2  # a flat square to the slot's walls
+    eu, ev = Vector((math.cos(e), math.sin(e))), Vector((-math.sin(e), math.cos(e)))
+    w, reach = TRAP_AF / 2, BEAM_HW + 5.0
+    slot_loop = [tuple(Vector((sx, sy)) + eu * u + ev * v) for u, v in ((-w, 0.0), (w, 0.0), (w, reach), (-w, reach))]
+    for c in (trap, _object(f"{name} Nut Slot", _prism("nut slot", slot_loop, t0, t1), col),
+              _object(f"{name} Rod Hole", _cyl("rod hole", ROD_FIT_R, t0 + 0.5, nut_tops["Star"] + 1, 32), col, location=(sx, sy, 0.0))):
         c.parent = beam
         _hidden(c)
         _bool(beam, c, "DIFFERENCE")
@@ -732,36 +760,67 @@ def stand(unit="NE"):
         _bool(beam, c, "DIFFERENCE")
     made[name] = beam
 
-    # ---- M8 rods and nuts (stand-ins, not printed) ----
+    # ---- M8 rods and nuts (stand-ins, not printed), and the printed bearing kit ----
+    # Each turning group is clamped between a thin nut under it (in its support's pocket, or
+    # in the bridge's trap under the star) and a thin nut over it. Washers and a spacer carry
+    # the clamp from inner race to inner race, so it never runs through the balls or a seal.
     hw = []
     zf = FLOOR_TOP - FLOOR_T - FOOT_H
-    # A's and B's rods run on up through a cap nut on the top bearing (in the boss's bore)
-    caps = {k: O[n[k]].location.z + sot.GEAR_H / 2 for k in "AB"}
-    tops = {"P": O[n["P"]].location.z + sot.GEAR_H / 2 - 0.6, "A": caps["A"] + NUT_H + 1.0,
-            "B": caps["B"] + NUT_H + 1.0, "O1": O[n["O1"]].location.z + sot.GEAR_H / 2 - 0.6,
-            "O2": O[n["O2"]].location.z + sot.GEAR_H / 2 - 0.6, "R": 13.5, "BrE": bz1 + NUT_H + 1.5, "BrW": bz1 + NUT_H + 1.5}
-    for nm, ((x, y), _) in sup.items():
-        hw.append(_object(f"{pre} Rod {nm}", _cyl("rod", ROD_R, zf + 0.5, tops[nm], 24), col, color=HW_COL, location=(x, y, 0.0)))
-        hw.append(_object(f"{pre} Nut {nm}", _hex("nut", NUT_AF, zf + TRAP_H - NUT_H, zf + TRAP_H), col, color=HW_COL,
-                          location=(x, y, 0.0)))
+    tops = {k: O[n[g]].location.z + sot.GEAR_H / 2 for k, g in (("P", "P"), ("A", "A"), ("B", "B"),
+                                                                 ("O1", "O1"), ("O2", "O2"), ("Star", "out"))}
+    rod_tops = {k: t + WASHER_T + THIN_H + 0.5 for k, t in tops.items()}
+    rod_tops.update(R=13.5, BrE=bz1 + NUT_H + 1.5, BrW=bz1 + NUT_H + 1.5)
+    xy = {nm: v[0] for nm, v in sup.items()}
+    xy["Star"] = (sx, sy)
+
+    def part(name, me, at):
+        ob = _object(name, me, col, color=HW_COL, location=(*xy[at], 0.0))
+        hw.append(ob)
+        return ob
+
+    for nm in sup:
+        part(f"{pre} Rod {nm}", _cyl("rod", ROD_R, zf + 0.5, rod_tops[nm], 24), nm)
+        part(f"{pre} Nut {nm} Foot", _hex("nut", NUT_AF, zf + TRAP_H - NUT_H, zf + TRAP_H), nm)
         if nm.startswith("Br"):
-            hw.append(_object(f"{pre} Nut {nm} Top", _revolve("acorn nut", _acorn_prof(bz1), 6, 0), col, color=HW_COL,
-                              location=(x, y, 0.0)))
-        else:
-            hw.append(_object(f"{pre} Nut {nm} Top", _hex("nut", NUT_AF, nut_tops[nm] - NUT_H, nut_tops[nm]), col, color=HW_COL,
-                              location=(x, y, 0.0)))
-        if nm in caps:
-            hw.append(_object(f"{pre} Nut {nm} Cap", _hex("nut", NUT_AF, caps[nm], caps[nm] + NUT_H), col, color=HW_COL,
-                              location=(x, y, 0.0)))
-    go = O[n["out"]]
-    hw.append(_object(f"{pre} Rod Star", _cyl("rod", ROD_R, bz0 + 0.5, go.location.z + sot.GEAR_H / 2 - 0.6, 24), col,
-                      color=HW_COL, location=(sx, sy, 0.0)))
-    hw.append(_object(f"{pre} Nut Star", _hex("nut", NUT_AF, nut_tops["Star"] - NUT_H, nut_tops["Star"]), col, color=HW_COL,
-                      location=(sx, sy, 0.0)))
+            part(f"{pre} Nut {nm} Acorn", _revolve("acorn nut", _acorn_prof(bz1), 6, 0), nm)
+        elif nm == "R":
+            part(f"{pre} Nut R Top", _hex("nut", NUT_AF, nut_tops["R"] - NUT_H, nut_tops["R"]), nm)
+        else:  # a thin nut on the floor of a pocket cut for a full one; the washer fills the rest
+            part(f"{pre} Nut {nm} Under", _hex("nut", NUT_AF, nut_tops[nm] - NUT_H, nut_tops[nm] - NUT_H + THIN_H), nm)
+    part(f"{pre} Rod Star", _cyl("rod", ROD_R, t0, rod_tops["Star"], 24), "Star")
+    part(f"{pre} Nut Star Under", _hex("nut", NUT_AF, t0, t0 + THIN_H), "Star").rotation_euler.z = e - math.pi / 2
+    for nm, t in tops.items():
+        part(f"{pre} Nut {nm} Over", _hex("nut", NUT_AF, t + WASHER_T, t + WASHER_T + THIN_H), nm)
     for h in hw:
         h["reference"] = "hardware stand-in, not printed"
     rods = {o.name: round(o.dimensions.z, 1) for o in hw if " Rod " in o.name}
-    return dict(parts=sorted(made), rods=rods)
+
+    kname = f"Bearing Kit {unit}"
+    kit_col = bpy.data.collections.get(kname)
+    if kit_col is None:
+        kit_col = bpy.data.collections.new(kname)
+        bpy.context.scene.collection.children.link(kit_col)
+    for ob in list(kit_col.objects):
+        _remove(ob)
+    kit = {}
+    for nm, t in tops.items():
+        bed = nut_tops[nm]  # the group's bed face: its lower bearing's outer face
+        rings = {"Over": (t, t + WASHER_T), "Spacer": (bed + BEARING_W, t - BEARING_W)}
+        if nm != "Star":  # the bridge's boss is the star's
+            rings["Under"] = (bed - WASHER_T, bed)
+        for kind, (z0, z1) in rings.items():
+            nme = f"Kit_{unit} Spacer {nm}" if kind == "Spacer" else f"Kit_{unit} Washer {nm} {kind}"
+            ob = _object(nme, _revolve(nme, _kit_ring(z0, z1), 96, 0), kit_col, color=KIT_COL, location=(*xy[nm], 0.0))
+            ob["kit"] = round(z1 - z0, 2)
+            kit[nme] = ob["kit"]
+    return dict(parts=sorted(made), rods=rods, kit=kit)
+
+
+def _kit_ring(z0, z1):
+    """(r, z) loop of a printed washer or spacer: flat ends on the inner race, outer edges
+    chamfered (the bed edge would otherwise flare)."""
+    c = KIT_CHAMFER
+    return [(KIT_BORE_R, z0), (KIT_R - c, z0), (KIT_R, z0 + c), (KIT_R, z1 - c), (KIT_R - c, z1), (KIT_BORE_R, z1)]
 
 
 def _acorn_prof(z0):
@@ -876,6 +935,61 @@ def check_stand(unit="NE", clear=1.0):
         if hit:
             hits[p.name] = hit
     return hits
+
+
+def check_kit(unit="NE", clear=0.5):
+    """Rods, nuts, washers and spacers that come within `clear` of anything that turns, their
+    own group included: each sits where nothing of its group's print is, on the inner races.
+    {part: [turning groups it hits]}."""
+    from mathutils.bvhtree import BVHTree
+    dg = bpy.context.evaluated_depsgraph_get()
+    parts = [o for o in bpy.data.collections[f"Stand {unit}"].objects if "reference" in o.keys()]
+    parts += list(bpy.data.collections[f"Bearing Kit {unit}"].objects)
+    sweeps = {}
+    for g, (axis, obs) in _turning_groups(unit).items():
+        bm = _sweep_bm(Vector((axis.x, axis.y, 0.0)), obs, clear)
+        sweeps[g] = BVHTree.FromBMesh(bm)
+        bm.free()
+    hits = {}
+    for p in parts:
+        bm = bmesh.new()
+        bm.from_object(p, dg)
+        bm.transform(p.matrix_world)
+        t = BVHTree.FromBMesh(bm)
+        bm.free()
+        hit = [g for g, s in sweeps.items() if t.overlap(s)]
+        if hit:
+            hits[p.name] = hit
+    return hits
+
+
+TUNE = (-0.1, 0.1, 0.2, 0.3)  # spacers printed beside each nominal one, to pick the free-running fit
+
+
+def export_kit(unit="NE", out_dir=None):
+    """The printed bearing kit, one file per design: the washer, and each spacer length with
+    its tuning set (TUNE: printed plugs come out a little long more often than short).
+    {name: (path, shells, non_manifold, missing)}."""
+    sg = _load("sator_gears")
+    out_dir = out_dir or os.path.join(_HERE, "export")
+    kit = list(bpy.data.collections[f"Bearing Kit {unit}"].objects)
+    washers = [o for o in kit if " Washer " in o.name]
+    if len({o["kit"] for o in washers}) != 1:
+        raise ValueError("washers differ")
+    res = {"Washer": sg.export_stl(washers[0], os.path.join(out_dir, f"Bearing_Washer_x{len(washers)}.stl"))}
+    lengths = {}
+    for o in kit:
+        if " Spacer " in o.name:
+            lengths.setdefault(o["kit"], []).append(o)
+    col = bpy.data.collections[f"Bearing Kit {unit}"]
+    for length, obs in sorted(lengths.items()):
+        count = f"_x{len(obs)}" if len(obs) > 1 else ""
+        res[f"Spacer {length:.1f}"] = sg.export_stl(obs[0], os.path.join(out_dir, f"Bearing_Spacer_{length:.1f}{count}.stl"))
+        for d in TUNE:
+            tmp = _object("Kit Tune", _revolve("kit tune", _kit_ring(0.0, length + d), 96, 0), col)
+            res[f"Spacer {length + d:.1f}"] = sg.export_stl(tmp, os.path.join(out_dir, f"Bearing_Spacer_{length + d:.1f}.stl"))
+            _remove(tmp)
+    return res
 
 
 def export_stand(unit="NE", out_dir=None):

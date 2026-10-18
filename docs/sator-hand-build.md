@@ -185,9 +185,33 @@ to 0.2 over the guess in 0.1 steps, each size engraved beside its hole. The hole
 like the gears' (fine polygon, straight wall, no chamfer), so the winning size carries over:
 set `BEARING_HOLE_D` / the idler bore radius to it, rebuild and re-export.
 
-Bearing model numbers and widths: TBD (width matters vs 8 mm gear thickness). The P stacks
-assume 608 (8 x 22 x 7, M8 rod); change `BEARING_W` / `ROD_HOLE_D` in `cad/sator_o_toggle.py`
-and rebuild if the bearings on hand differ.
+Bearing model numbers and widths: TBD (width matters vs 8 mm gear thickness). The toggle
+units assume 608 (8 x 22 x 7, M8 rod); change `BEARING_W`, `LEDGE_D` and `SPACER_BORE_D` in
+`cad/sator_o_toggle.py` and `KIT_R` in `cad/toggle_stand.py` and rebuild if the bearings on
+hand differ.
+
+How a bearing pair is held (every turning group of the toggle units, and the rule for the
+full board): clamp the inner races, locate the outer races, and let nothing that stands still
+touch anything that turns.
+- Each outer race stops on a narrow ledge, 20 mm inside diameter out to the 21.9 seat
+  (`LEDGE_D`; a 608's housing shoulder must stay under 20). Inside the ledge the plug stands
+  back 0.6.
+- A loose printed spacer (11.5 x 8.4, `KIT_R`) runs between the two inner races, down a 13 mm
+  bore through the plug (`SPACER_BORE_D`), so it never touches the turning part.
+- The group is clamped between a thin M8 nut under it and one over it, each on a printed
+  washer (11.5 x 8.4 x 2.5) that touches only the inner race. A 608's seal is fixed in the
+  outer race and turns with the gear, and a nut's corners (15 across) reach onto it, so no
+  nut may touch a bearing directly.
+- Tightened, the clamp runs nut, washer, inner race, spacer, inner race, washer, nut: never
+  through the balls. Before, the nuts squeezed the two outer races together through the
+  balls (the plug sat between them), and a group locked as soon as its nut was more than
+  snug. Now the nuts can be tight, which also stops the group rocking in the bearings' own
+  axial play.
+- The spacer has to match the distance between the two ledges to within about the bearing's
+  axial play (roughly 0.05). Short or long, the clamp loads the balls again. So each spacer
+  ships with a tuning set (`TUNE`: -0.1, +0.1, +0.2, +0.3; printed plugs come out long more
+  often than short, from the support under a seat's ceiling). Tighten the top nut firmly,
+  turn the gear by hand and keep the length that turns freely.
 
 ## Derived dimensions (module 2.25, spur, shift 0, clearance 0.25)
 
@@ -336,14 +360,14 @@ reports clearances; `layout()` holds the axis positions.
   (`export_p_stack(unit)` -> `cad/export/Gear_P_Stack_<unit>.stl`; NE and SW are byte-identical,
   so print one design twice). It turns on two 22 mm bearings (608, 8 x 22 x 7, `BEARING_W`) on a
   fixed M8 threaded rod: each gear keeps its 21.9 bearing hole and the tube plugs it 7 below the
-  outer face, so each bearing seats 7 deep, on the tube's end. A 16 x 0.6 counterbore
-  (`RELIEF_D`) under each seat keeps the shoulder off the inner race; the rod hole is 8.6
-  (`ROD_HOLE_D`). The tube is a small carved column (`_column`), top down: abacus band r 20.5
+  outer face, so each bearing seats 7 deep, its outer race on a ledge at the tube's end
+  (see "How a bearing pair is held" under Bearings); the 39.0 spacer runs down the tube's 13 mm
+  bore between the inner races. The tube is a small carved column (`_column`), top down: abacus band r 20.5
   (`CAP_R`, into P's r 22 hub), echinus cushion down to the neck (39 deg at the top, 50 at the
   foot, so it prints unsupported) with the flutes carried up it as leaves (`LEAF_D` 1.2), an
   astragal bead, a shaft narrowing from r 12.5 (`SHAFT_R`) to r 11 (`WAIST_R`) at mid-height
   with 12 round-ended flutes 1.1 deep (`FLUTES`, `FLUTE_D`, fillets between), then an Attic
-  base (torus, scotia, torus) on the 54T. Thinnest wall to the rod hole: 5.6 (flute bottom at
+  base (torus, scotia, torus) on the 54T. Thinnest wall to the bore: 3.4 (flute bottom at
   the waist). The base's lower torus is the widest point in driver A's height band, r 14.5
   (`TUBE_R`): A's tooth tips pass 2.4 from it (they reach 16.9 from P's axis); A turns 1 mm
   above the 54T, so the base cannot spread wider. The 54T keeps P's angle (the stack is built
@@ -380,15 +404,22 @@ pieces to the unit (`build_unit` calls it); `stand(unit)` builds the stand in co
 part's swept volume; `export_stand(unit)` writes one STL per part design.
 
 - Bearings: every turning group runs on two 608s (8 x 22 x 7) on a fixed M8 rod, one pressed
-  into each outer face of the group (the 21.9 holes the gears already have). A plug between
-  the two seats carries the outer races; a 16 x 0.6 counterbore keeps each inner race clear;
-  the rod hole is 8.6. Each inner race rests on an M8 hex nut sunk in a pocket at the top of
-  what holds the rod (13.3 across flats, open at the top, floor 6.5 under the bed face), so
-  the nut stands 1 proud of the support, 1 mm under the group's bed face; the nut is the
-  spacer and touches only the inner race and the seal. 12 bearings in all for the corner.
+  into each outer face of the group (the 21.9 holes the gears already have), held as in "How
+  a bearing pair is held" (Bearings): outer races on the ledges of the plug between the two
+  seats, a printed spacer between the inner races, a thin nut and a printed washer under and
+  over each group. Under P, A, B and the O's the thin nut sits on the floor of the pocket at
+  the top of the support (cut 6.5 deep for a full nut, 13.3 across flats) and the washer fills
+  the 2.5 left, so the washer's top is the group's bed face; the support itself stays 1 under
+  it. Under the star, the bridge's boss does both jobs (see Bridge). 12 bearings in all for the
+  corner; spacers 3.0 for A, B, the star and the O's (the two ledges 3 apart), 39.0 for P.
   Checked (solid/empty profile at r 10.6 and r 11.4 round each NE axis): all 12 seats are
   open 7 to 7.25 deep with wall all round; the thinnest wall is 4.05 (O drums, r 15 round
-  the 21.9 seat), so press those bearings in square and slowly.
+  the 21.9 seat), so press those bearings in square and slowly. Rays up every bore at r 3, 5
+  and 6 cross no surface.
+  Assembly of a group: press the lower bearing in to its ledge, drop the spacer into the bore
+  (it sits on the lower inner race), press the upper bearing in to its ledge. Thin nut into the
+  support's pocket, washer on it, the group down the rod onto the washer, washer, thin nut;
+  tighten firmly and turn the gear by hand (tune the spacer if it drags only when tight).
   Rod play: M8 threaded rod is typically 7.8 to 7.9 over the thread crests, under the 608's
   8.0 bore. A, B, the star and the O's have their two bearings only 10 apart, so 0.1 of play
   each way could rock a gear about 1 deg (about 1 mm at the rim). Measure the rod; if a group
@@ -417,7 +448,7 @@ part's swept volume; `export_stand(unit)` writes one STL per part design.
   - A's and B's upper bearing sits right under the locking boss, which prints with the
     gear: a 22.5 bore (`BOSS_BORE_R`, hidden cutter `... Bearing Bore`) runs down through
     the boss's centre, so the bearing presses in from the top, and a cap nut on the rod
-    sits on its inner race inside the bore (3.7 mm clear of the boss).
+    sits on its washer inside the bore (3.7 mm clear of the boss).
 - Supports. All eight lie on the compass lines through the star axis: A and B on the A-B line
   (r 72), the bridge's columns across it (r 87, `BR_D`), P and R on one diagonal, the two O's
   on the other (r 127.3).
@@ -428,10 +459,18 @@ part's swept volume; `export_stand(unit)` writes one STL per part design.
     flush with the top); and the bridge's two (spigot into the beam above).
   - Bridge: a beam through the star gap (z -39..-31, 1 mm air to the A/B gears below and the
     star above), waisted round the star to stay 2.5 off the pin posts' sweep (28 wide at the
-    star, 40 at the columns), stepped fasciae on its sides, rivets round each end. The star's
-    rod hangs from a nut in a pocket in its top (floor 2.5 thick, so nothing can sag onto A
-    and B); each end is clamped down by an acorn nut on its rod (room for one: 2+ mm to
-    everything that turns, up past its 15 mm height).
+    star, 40 at the columns), stepped fasciae on its sides, rivets round each end. Each end is
+    clamped down by an acorn nut on its rod (room for one: 2+ mm to everything that turns, up
+    past its 15 mm height).
+    The star's rod: nothing can reach under the bridge (1 mm to the A/B mesh), so its thin nut
+    is trapped inside the beam. A closed pocket (z -36.8..-32.5, 13.3 across flats) opens
+    sideways through one face of the beam by a slot as wide; slide the nut in before the bridge
+    goes on. The rod screws down through it until it stands on the pocket's floor (2.2 thick,
+    no hole, so the rod can never be screwed down onto A and B). Over the nut a 1.5 roof, and
+    on the roof a boss (11.5 across, `KIT_R`, up to the star's bed face at -30) under the star's
+    inner race. Tightening the star's top nut pulls the trapped nut up against the roof, so
+    the star can lift off neither the rod nor the rod out of the beam, which the old open
+    pocket allowed (it only held the star by its weight).
     Measured: 1.5 to 2 mm from the pin posts' swept volume, the tightest spot of the stand.
   - Floor: radius 158 round the star axis, 6 thick (z -68..-62), a compass rose: spokes along
     the 8 lines, rings at r 80 and r 127.3, a rim 14 wide with rivets, round windows (r 4
@@ -443,12 +482,14 @@ part's swept volume; `export_stand(unit)` writes one STL per part design.
     6.8 deep, open below), four smaller ones near the centre peg in. Every rod runs between
     two nuts (foot trap and support pocket), so the stand can be lifted without the rods,
     feet or tiles dropping out.
-- Hardware for the corner: M8 threaded rod (one 1 m length), cut to P 71, A 43, B 43, each
-  O 62, R 89, bridge columns 53 (x2), star 25; cut 0 to 1 short, never long (most rod tops end
-  0.6 under a turning face). Plain hex nuts (DIN 934 / ISO 4032: 13 across flats, at most 6.8
-  tall; not nyloc or flange) x 17: one in each foot, one on top of P, A, B, O1, O2, R and the
-  star, and a cap nut over A's and B's top bearing (snug only: it holds the gear on, and the
-  bearing takes it). 2 M8 acorn nuts (DIN 1587) on the bridge ends. 12 x 608 bearings, 2 steel 4 x 25.7
+- Hardware for the corner: M8 threaded rod (one 1 m length), cut to P 78.5, A 42.5, B 42.5,
+  each O 69.5, R 89, bridge columns 52.5 (x2), star 30.8; cut 0 to 1 short, never long (each
+  top ends 0.5 over its nut; the star's rod stands on the bridge's pocket floor). Plain hex
+  nuts (DIN 934 / ISO 4032: 13 across flats, at most 6.8 tall; not nyloc or flange) x 9: one
+  in each foot and one under the corner R. Thin hex nuts (DIN 439 / ISO 4035, M8: 13 across
+  flats, 4 tall) x 12: under and over P, A, B, O1, O2 and the star (those under sit in the
+  supports' pockets, the star's in the bridge's trap). 2 M8 acorn nuts (DIN 1587) on the
+  bridge ends. 12 x 608 bearings, 2 steel 4 x 25.7
   drive pins. Stock bolts do not fit: the lengths fall between standard sizes and would leave a
   bearing short of rod or rub a boss. The nuts sit in hex pockets, so they hold the rods in
   place rather than clamp them (spin a foot nut up snug, then back it off to the nearest flat).
@@ -460,6 +501,10 @@ part's swept volume; `export_stand(unit)` writes one STL per part design.
 - Print list for the corner, all from `cad/export/`, as exported (each lands right way up):
   - Turning: `Gear_P_Stack_NE`, `Gear_Driver_A_NE`, `Gear_Driver_B_NE`, `Toggle_Star_S_NE`,
     `Gear_O_56T_NE_x2` (one each, two of the O gear).
+  - Bearing kit (`export_kit(unit)`, collection `Bearing Kit <unit>`): `Bearing_Washer_x11`,
+    `Bearing_Spacer_3.0_x5`, `Bearing_Spacer_39.0`, and the tuning sets
+    `Bearing_Spacer_2.9` / `3.1` / `3.2` / `3.3` and `38.9` / `39.1` / `39.2` / `39.3` (print
+    them in a row, so they come off the plate in order). No supports; standing on end.
   - Stand: `Stand_Floor_Q1_NE` .. `Q4` (one each), `Stand_Keystone_NE`, `Stand_Key_NE_x8`,
     `Stand_Foot_NE_x8`, `Stand_Foot_Hub_NE_x4`, `Stand_Column_O_NE_x2`, `Stand_Column_R_NE`,
     `Stand_Column_Br_NE_x2`, `Stand_Bridge_NE` (the suffix is the count).
@@ -467,9 +512,20 @@ part's swept volume; `export_stand(unit)` writes one STL per part design.
 - Checked: `check_stand` finds nothing within 1.5 mm (rods and nuts left out: they sit in the
   bores on purpose); the rods and nuts stay 2+ mm from every turning part on another axis and
   each nut sits in its pocket without touching the print; the unit's own `check()` still
-  reports no overlaps; every exported part is one closed solid.
+  reports no overlaps; every exported part is one closed solid. `check_kit(unit, clear)`
+  finds no rod, nut, washer or spacer within 0.5 of anything that turns, its own group
+  included (the spacers stand 0.75 inside their bores, so they show at 1.0).
+- Upgrading a corner printed before the bearing kit: the floor tiles, keystone, keys, feet
+  and columns are unchanged (the thin nuts and washers fit the old pockets). Reprint the
+  bridge (it has the nut trap now). The turning parts differ only inside their plugs: the
+  bore was 8.6 and the ledge started at 16 across. Either reprint them, or press the
+  bearings out (push from the other side through the bore) and drill each plug through at
+  13 mm (1/2 in also works: 0.6 round the spacer). The old wider ledge can stay: it also
+  touches the seal, but the seal turns with the outer race, so nothing rubs. The P stack's
+  bore is 39 deep, so drill it from both ends, or reprint it.
 - Not yet: the letters are not fastened (the O's and P float above their gears), and the
-  corner R has no gear (it stands on its column).
+  corner R has no gear (it stands on its column). A letter's mount has to clear its group's
+  top washer and nut (16 across, 7 over the gear's top face, plus the rod's 0.5).
 
 ## Open questions
 
