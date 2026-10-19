@@ -149,11 +149,17 @@ export function makeRingGear(params, color, opts = {}) {
 // Deform a prism into a cone frustum about the Z axis: scale each vertex's (x,y)
 // by z/zApex, so a vertex in the apex plane (z = zApex) keeps full size and the
 // apex (z = 0) collapses to a point. Radius becomes proportional to z.
-export function scaleConical(geo, zApex) {
+// Vertices within `keepR` of the axis (a bore) are left alone, so a bore stays a
+// straight cylinder a shaft fits along its whole length instead of tapering with
+// the teeth.
+export function scaleConical(geo, zApex, keepR = 0) {
   const pos = geo.attributes.position;
+  const keep2 = keepR > 0 ? (keepR * (1 + 1e-5)) ** 2 : -1; // positions are float32
   for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i), y = pos.getY(i);
+    if (x * x + y * y <= keep2) continue;
     const s = pos.getZ(i) / zApex;
-    pos.setXY(i, pos.getX(i) * s, pos.getY(i) * s);
+    pos.setXY(i, x * s, y * s);
   }
   pos.needsUpdate = true;
 }
@@ -178,7 +184,7 @@ export function bevelGearGeometry(params, { faceWidth = 10, coneAngle = Math.PI 
   }
   const geo = new THREE.ExtrudeGeometry(shape, { depth: axial, bevelEnabled: false, steps: 1, curveSegments: 24 });
   geo.translate(0, 0, zBack - axial); // front face -> zBack-axial, back face -> zBack
-  scaleConical(geo, zBack); // taper to the apex at the origin
+  scaleConical(geo, zBack, bore); // taper the teeth to the apex at the origin; the bore stays straight
   geo.computeVertexNormals();
   return geo;
 }

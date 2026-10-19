@@ -11,6 +11,9 @@ parts in their print poses (collection `Planetary Fidget`) and the assembly
 (`Planetary Fidget Assembly`), `check()` runs the checks below, `export(out_dir)` writes
 the STLs to `cad/export/planetary_fidget/`. File: `cad/planetary_fidget.blend`.
 
+Run it with `cad\make.bat planetary_fidget save check export render %USERPROFILE%\Downloads`
+(cmd; see `cad/make.py`): a clean background Blender, exit status 1 on any problem.
+
 ## Gears
 
 Module 2, 25 deg pressure angle. Sun 15T, three planets 15T, ring 45T: (15 + 45) / 3 = 20,
@@ -108,12 +111,15 @@ start, run it into the pilot once before assembly.
 
 At three sun / carrier angles:
 - Each planet turns 0.21 mm each way at the pitch circle against the sun and 0.15 against
-  the ring before the teeth touch.
-- Parts that turn against each other stay clear: 1.0 between the carrier and the frame, the
-  sun and the planets; spacers 0.71 from the bores; each inner race at least 0.78 clear of
-  the part turning round it, each outer race 0.5 clear of anything standing still; screws
-  2.6 inside the bores, the planet screw heads 7.2 over the frame plate.
-- Every export is one closed solid.
+  the ring before the teeth touch; it must stay within -0.03 / +0.05 of the flank thinning
+  (0.20 and 0.15), so a drift fails.
+- Parts that turn against each other stay clear, each by more than the least in brackets
+  (the constants above `check()`): 1.0 between the carrier and the frame, the sun and the
+  planets (0.8); spacers 0.70 from the bores (0.5); each inner race 0.78 clear of the part
+  turning round it (0.6), each outer race 0.5 clear of anything standing still (0.4);
+  screws 2.6 inside the bores (2.0), the planet screw heads 7.2 over the frame plate (5.0).
+  Gaps are measured both ways, and a part wholly inside another counts as 0.
+- Export refuses to write a part that is not one closed solid with every piece present.
 
 ## Safety
 

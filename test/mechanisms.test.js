@@ -148,6 +148,26 @@ test('Geneva lock geometry: the cam nests inside the pocket and the pocket fits 
   }
 });
 
+test('Geneva locking cam: its gap faces the crank pin (+x), where the slot is entered', () => {
+  for (const slots of [3, 4, 6, 8]) {
+    const m = new Geneva({ ...CONFIG.geneva, slots });
+    const pos = m.cam.geometry.attributes.position;
+    const angles = [];
+    for (let k = 0; k < pos.count; k++) {
+      if (Math.hypot(pos.getX(k), pos.getY(k)) > 1e-6) angles.push(mod(Math.atan2(pos.getY(k), pos.getX(k)), TAU));
+    }
+    angles.sort((x, y) => x - y);
+    let best = { size: TAU - angles[angles.length - 1] + angles[0], mid: mod((angles[angles.length - 1] + TAU + angles[0]) / 2, TAU) };
+    for (let i = 1; i < angles.length; i++) {
+      const size = angles[i] - angles[i - 1];
+      if (size > best.size) best = { size, mid: (angles[i] + angles[i - 1]) / 2 };
+    }
+    const off = Math.min(best.mid, TAU - best.mid);
+    assert.ok(off < 1e-6, `slots=${slots}: cam gap centred ${(off / DEG).toFixed(2)} deg off the pin`);
+    m.dispose?.();
+  }
+});
+
 test('DoubleGeneva.update rocks the slotted output via doubleGenevaRocker and counter-rotates the wheels', () => {
   const m = new DoubleGeneva(CONFIG.double);
   const amp = Math.min(CONFIG.double.amplitude * DEG, 1.5);
@@ -262,10 +282,11 @@ test('SpurTrain threads a non-zero helix into the gear geometry (twists the wall
   helical.dispose();
 });
 
-test('InternalGear clamps ringTeeth up to the pinion+4 validity floor', () => {
+test('InternalGear raises ringTeeth to the pinion+4 validity floor, and says so', () => {
   const cfg = { module: 4, pinionTeeth: 20, ringTeeth: 18, pressureAngle: 20, thickness: 8 };
   const m = new InternalGear(cfg);
-  assert.equal(m.zr, 24, 'ringTeeth (18) clamped up to pinionTeeth+4 (24)');
+  assert.equal(m.zr, 24, 'ringTeeth (18) raised to pinionTeeth+4 (24)');
+  assert.ok(m.problems.length > 0, 'and the change is reported, not silent');
   const ratio = internalGearRatio(cfg.pinionTeeth, 24);
   near(m.ratio, ratio, 1e-12, 'ratio uses the clamped count');
   for (const theta of THETAS) {
@@ -450,6 +471,20 @@ test('SatorSquare: the two meshed driver gears interlock tooth-in-gap (phased so
       }
     }
   }
+});
+
+test('the GUI spur settings reach the gears, backlash included (it was once dropped)', () => {
+  const gui = { gears: 3, t1: 12, t2: 24, t3: 18, t4: 15, t5: 30, module: 5, pressureAngle: 20, thickness: 8, helix: 0, spokes: 0 };
+  const t0 = SpurTrain.fromConfig({ ...gui, backlash: 0 });
+  const tb = SpurTrain.fromConfig({ ...gui, backlash: 0.4 });
+  assert.deepEqual(t0.teeth, [12, 24, 18]);
+  const g0 = t0.gears[0].children[0].geometry.attributes.position;
+  const gb = tb.gears[0].children[0].geometry.attributes.position;
+  let maxDiff = 0;
+  for (let k = 0; k < g0.count; k++) maxDiff = Math.max(maxDiff, Math.abs(gb.getX(k) - g0.getX(k)));
+  assert.ok(maxDiff > 1e-4, 'backlash from the GUI thinned the teeth');
+  t0.dispose();
+  tb.dispose();
 });
 
 test('backlash thins teeth without moving any mount: spur centres + phases identical, geometry differs', () => {

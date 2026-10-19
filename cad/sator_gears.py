@@ -430,6 +430,10 @@ def _drop_back_to_back(bm):
     return len(dup)
 
 
+class ExportError(RuntimeError):
+    """A part failed its export checks; nothing was written."""
+
+
 def export_stl(gear, path=None, extra=(), tries=24):
     """Union a gear with its crossings into ONE solid and write a binary STL.
 
@@ -443,7 +447,8 @@ def export_stl(gear, path=None, extra=(), tries=24):
     result. Each result is checked (one shell, no open edges, points just inside every
     piece lie inside the solid); on a failure other orders are tried, up to `tries`.
     Coordinates are gear-local (axis at the origin). Returns (path, shells, non_manifold,
-    missing pieces).
+    missing pieces). Raises ExportError, writing nothing, unless the result is one closed
+    shell with every piece present.
     """
     import itertools
     import os
@@ -537,16 +542,22 @@ def export_stl(gear, path=None, extra=(), tries=24):
         bpy.data.meshes.remove(m)
     _, bm, shells, non_manifold, missing = best
     missing = [m[:-len(" Export")] for m in missing]
-    if missing or non_manifold or shells != 1:
-        print(f"[!] {os.path.basename(path)}: shells {shells}, non-manifold {non_manifold}, missing {missing}")
-    with open(path, "wb") as f:
-        f.write(b"\0" * 80 + struct.pack("<I", len(bm.faces)))
-        for face in bm.faces:
-            f.write(struct.pack("<3f", *face.normal))
-            for v in face.verts:
-                f.write(struct.pack("<3f", *v.co))
-            f.write(b"\0\0")
-    bm.free()
+    try:
+        if missing or non_manifold or shells != 1:
+            # fail closed: a broken part never reaches the export folder (the last good file stays)
+            raise ExportError(f"[X] {os.path.basename(path)} not written: shells {shells}, "
+                              f"non-manifold {non_manifold}, missing {missing}")
+        tmp = path + ".partial"
+        with open(tmp, "wb") as f:
+            f.write(b"\0" * 80 + struct.pack("<I", len(bm.faces)))
+            for face in bm.faces:
+                f.write(struct.pack("<3f", *face.normal))
+                for v in face.verts:
+                    f.write(struct.pack("<3f", *v.co))
+                f.write(b"\0\0")
+        os.replace(tmp, path)  # a crash mid-write leaves the .partial, never half an STL
+    finally:
+        bm.free()
     return path, shells, non_manifold, missing
 
 

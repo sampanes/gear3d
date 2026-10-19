@@ -69,11 +69,7 @@ if (params.has('angle')) {
 // falling through to a default. Adding a mode (e.g. a future SATOR square) is
 // one entry here plus its `config` block above.
 const MODES = {
-  'Spur train': () => {
-    const s = config.spur;
-    const teeth = [s.t1, s.t2, s.t3, s.t4, s.t5].slice(0, s.gears);
-    return new SpurTrain({ teeth, module: s.module, pressureAngle: s.pressureAngle, thickness: s.thickness, helix: s.helix, spokes: s.spokes });
-  },
+  'Spur train': () => SpurTrain.fromConfig(config.spur),
   Geneva: () => new Geneva(config.geneva),
   'Double Geneva': () => new DoubleGeneva(config.double),
   'Internal gear': () => new InternalGear(config.internal),
@@ -109,7 +105,7 @@ const actions = {
     else clearOverlays(mechanism.group);
   },
   exportSTL: () => {
-    if (!mechanism) return;
+    if (!mechanism || refuseExport()) return;
     const name = config.mode.toLowerCase().replace(/\s+/g, '-');
     const s = config.export.scale;
     const tag = s === 1 ? '' : `-x${s}`; // record the scale in the filename
@@ -119,7 +115,7 @@ const actions = {
     saveSTL(mechanism.printable ?? mechanism.group, `gear3d-${name}${tag}.stl`, s);
   },
   exportParts: () => {
-    if (!mechanism) return;
+    if (!mechanism || refuseExport()) return;
     const name = config.mode.toLowerCase().replace(/\s+/g, '-');
     const s = config.export.scale;
     const tag = s === 1 ? '' : `-x${s}`;
@@ -135,6 +131,15 @@ const actions = {
     }
   },
 };
+
+// A mechanism whose parts would collide (see its `problems`) is not exported: the
+// readout says why, and a print of it could not turn.
+function refuseExport() {
+  const problems = mechanism.problems ?? [];
+  if (!problems.length) return false;
+  window.alert(`Not exported: these parts would not turn.\n\n${problems.join('\n')}`);
+  return true;
+}
 
 buildGUI(config, actions, Object.keys(MODES));
 build();

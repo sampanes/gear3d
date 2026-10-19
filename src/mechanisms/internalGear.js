@@ -8,16 +8,22 @@ import { makeGear, makeRingGear } from '../gears/gear.js';
 import { gearMetrics, internalGearMetrics } from '../gears/involute.js';
 import { internalGearRatio } from '../kinematics.js';
 import { PALETTE, disc, disposeObject } from '../parts.js';
+import { DIG_LIMIT, internalGearInterference } from '../gears/meshcheck.js';
 
 export class InternalGear {
   constructor(p) {
     this.group = new THREE.Group();
     const { module: m, pressureAngle: pa, thickness: t } = p;
     this.zp = p.pinionTeeth;
-    // Ring must be the larger gear. For clean involute meshing without tip
-    // interference a tooth-count difference of ~10+ is preferable; the GUI ranges
-    // keep it well above this in normal use, so +4 is just a validity floor.
+    // Ring must be the larger gear: +4 keeps the geometry valid at all. Whether the
+    // teeth actually clear is measured below (a full-depth ring needs a much bigger
+    // difference, more so at low pressure angles), and every shortfall is reported in
+    // `problems` (shown in the readout; export refuses) rather than hidden.
     this.zr = Math.max(p.ringTeeth, this.zp + 4);
+    this.problems = [];
+    if (this.zr !== p.ringTeeth) {
+      this.problems.push(`ring raised from ${p.ringTeeth} to ${this.zr} teeth (must exceed the pinion by 4+)`);
+    }
 
     const pinM = gearMetrics({ module: m, teeth: this.zp, pressureAngle: pa });
     const ringM = internalGearMetrics({ module: m, teeth: this.zr, pressureAngle: pa });
@@ -39,6 +45,12 @@ export class InternalGear {
     const shaft = disc(bore * 0.92, t * 1.8, PALETTE.shaft, { metalness: 0.85, rough: 0.3 });
     shaft.position.set(this.d, 0, 0);
     this.group.add(shaft);
+
+    const dig = internalGearInterference(this, p, 8);
+    this.update(0);
+    if (dig > DIG_LIMIT * m) {
+      this.problems.push(`teeth collide by ${dig.toFixed(2)} mm: use more ring teeth or a higher pressure angle`);
+    }
   }
 
   update(theta) {
@@ -47,7 +59,8 @@ export class InternalGear {
   }
 
   info() {
-    return `internal pair  z ${this.zp} → ${this.zr}\nring spins ${this.ratio.toFixed(3)}× the pinion (same dir)\ncenter dist ${this.d.toFixed(1)}`;
+    const warn = this.problems.map((s) => `\n[!] ${s}`).join('');
+    return `internal pair  z ${this.zp} -> ${this.zr}\nring spins ${this.ratio.toFixed(3)}x the pinion (same dir)\ncenter dist ${this.d.toFixed(1)}${warn}`;
   }
 
   dispose() {

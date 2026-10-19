@@ -220,3 +220,19 @@ test('bevel:false keeps the true contour at every z (print pose); the default be
   assert.ok(ringFlat.minR >= ringRa - 1e-4, `print ring opening stays at ra (minR ${ringFlat.minR} vs ${ringRa})`);
   assert.ok(ringBeveled.minR <= ringRa - 0.3, `screen ring bevel intrudes inward (minR ${ringBeveled.minR})`);
 });
+
+test('bevel gear bore stays a straight cylinder along the whole face (a shaft fits)', () => {
+  const params = { module: 4, teeth: 16, pressureAngle: 20 };
+  const bore = 3.4;
+  const geo = bevelGearGeometry(params, { faceWidth: 14, coneAngle: Math.atan2(16, 24), bore });
+  const pos = geo.attributes.position;
+  let minR = Infinity;
+  let zLo = Infinity, zHi = -Infinity;
+  for (let i = 0; i < pos.count; i++) {
+    const r = Math.hypot(pos.getX(i), pos.getY(i));
+    minR = Math.min(minR, r);
+    if (Math.abs(r - bore) < 1e-6) { zLo = Math.min(zLo, pos.getZ(i)); zHi = Math.max(zHi, pos.getZ(i)); }
+  }
+  assert.ok(minR > bore - 1e-6, `bore narrows to ${minR.toFixed(3)} (want ${bore})`);
+  assert.ok(zHi - zLo > 1, 'the bore runs the full face at its full radius');
+});

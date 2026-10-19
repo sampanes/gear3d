@@ -652,7 +652,10 @@ def _flat_fill(loops):
                 edges[k] = edges.get(k, 0) + 1
         if len(verts) == total and sum(1 for n in edges.values() if n == 1) == total:
             return verts, faces
-    return first  # no clean fill found: keep the plain result
+    # no clean fill found: keep the plain result for the model, and say so; the exporter
+    # refuses the part if the hole shows up in the solid
+    print(f"[!] crossings fill: no clean triangulation of {len(loops)} outline(s)")
+    return first
 
 
 def _curve_fill(loops):

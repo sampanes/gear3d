@@ -11,6 +11,7 @@ import { gearMetrics } from '../gears/involute.js';
 import { planetaryAngles, planetaryAssembly, toothPhaseAt } from '../kinematics.js';
 import { TAU } from '../math.js';
 import { PALETTE, metal, disc, disposeObject } from '../parts.js';
+import { DIG_LIMIT, planetaryInterference } from '../gears/meshcheck.js';
 
 export class Planetary {
   constructor(p) {
@@ -22,6 +23,11 @@ export class Planetary {
     const zR = (this.zRing = zS + 2 * zP);
     this.fixed = p.fixed || 'ring';
     this.assembly = planetaryAssembly(zS, zR, N); // integer => all planets mesh
+    // otherwise only some planets can sit in mesh and the rest pass through the sun and
+    // ring teeth: reported (readout; export refuses), never built silently
+    this.problems = Number.isInteger(this.assembly) ? [] : [
+      `planets cannot all mesh: (sun + ring) / planets = ${this.assembly.toFixed(2)} must be whole`,
+    ];
 
     const sunM = gearMetrics({ module: m, teeth: zS, pressureAngle: pa });
     const planetM = gearMetrics({ module: m, teeth: zP, pressureAngle: pa });
@@ -74,6 +80,15 @@ export class Planetary {
     // the contact dir 0, where the planet faces outward toward the ring).
     const B = toothPhaseAt(this.planetPhase[0], 0, zP);
     this.ringPhase = -(0.5 + B) * pitchR;
+
+    // a whole assembly count still leaves small planets digging into a full-depth ring
+    if (!this.problems.length) {
+      const dig = planetaryInterference(this, p, 6, 1);
+      this.update(0);
+      if (dig > DIG_LIMIT * m) {
+        this.problems.push(`teeth collide by ${dig.toFixed(2)} mm: use bigger planets or a higher pressure angle`);
+      }
+    }
   }
 
   update(theta) {
@@ -93,8 +108,8 @@ export class Planetary {
       carrier: `${(this.zRing / this.zSun).toFixed(2)}:1  sun→ring (reversed)`,
       sun: `${((this.zSun + this.zRing) / this.zRing).toFixed(2)}:1  carrier→ring`,
     };
-    const warn = Number.isInteger(this.assembly) ? '' : '  ⚠ planets unequal (assembly)';
-    return `planetary  S${this.zSun} · P${this.zPlanet}×${this.n} · R${this.zRing}\nfixed ${this.fixed}${warn}\n${r[this.fixed]}`;
+    const warn = this.problems.map((s) => `\n[!] ${s}`).join('');
+    return `planetary  S${this.zSun} / P${this.zPlanet} x${this.n} / R${this.zRing}\nfixed ${this.fixed}\n${r[this.fixed]}${warn}`;
   }
 
   dispose() {

@@ -237,7 +237,7 @@ def build(save=False):
         o.hide_set(True)
     assemble()
     if save:
-        bpy.data.libraries.write(os.path.join(_HERE, "planetary_fidget.blend"), {bpy.context.scene}, compress=True)
+        gt.save_scene(os.path.join(_HERE, "planetary_fidget.blend"), ("Planetary Fidget", "Planetary Fidget Assembly"))
     return col
 
 
@@ -340,22 +340,19 @@ def _hardware(col, carrier_rot):
 
 # ---- checks ----------------------------------------------------------------------------------
 
-def _gap(a, b, step=0.5):
-    """Smallest distance from points along b's edges to a's surface (0 when they cross)."""
-    if gt._overlap(a, b):
-        return 0.0
-    ta = gt._tree(a)
-    best = 99.0
-    for q in gt._samples(b, step):
-        hit = ta.find_nearest(q, best)
-        if hit[0] is not None:
-            best = min(best, hit[3])
-    return best
+# least gaps the check accepts, a margin under what the design gives (in brackets), so a
+# drift fails the check long before parts touch
+RUN = 0.8      # printed parts turning against each other (1.0)
+KIT = 0.5      # spacers and shims in a bore (0.70)
+INNER = 0.6    # a steel inner race and the part turning round it (0.78)
+OUTER = 0.4    # an outer race and anything standing still (0.5)
+SCREW = 2.0    # a screw and the parts turning round it (2.62)
+HEAD = 5.0     # a planet screw's head over the frame plate (7.2)
 
 
-def check(clear=0.4):
+def check(clear=RUN):
     """At a few sun / carrier angles: free turn of every mesh, and gaps between parts that
-    turn against each other. Returns a list of problems."""
+    turn against each other (bigger than the constants above). Returns a list of problems."""
     problems = []
     for sun_rot, car_rot in ((0.0, 0.0), (0.07, 0.31), (0.19, 1.1)):
         col = assemble(sun_rot, car_rot, hardware=True)
@@ -365,20 +362,21 @@ def check(clear=0.4):
         for i in range(N):
             pl = O[f"Asm Planet {i}"]
             c = pl.matrix_world.translation
-            for other, nm in ((sun, "sun"), (frame, "ring")):
+            # one flank of each gear: planet + sun both thinned, planet thinned + ring space widened
+            for other, nm, flanks in ((sun, "sun", 2 * BACKLASH), (frame, "ring", BACKLASH + RING_EXTRA)):
                 bl = gt._backlash(other, pl, (c.x, c.y), MODULE * PLANET / 2)
-                line = f"{tag}: planet {i} / {nm} free turn {bl[0]:.2f} / {bl[1]:.2f} mm"
+                line = f"{tag}: planet {i} / {nm} free turn {bl[0]:.2f} / {bl[1]:.2f} mm (want {flanks:.2f})"
                 print("[CHECK]", line)
-                if min(bl) < 0.05 or max(bl) > 0.6:
+                if not gt.backlash_ok(bl, flanks):
                     problems.append(line)
         # turning against each other: (a, b, least gap)
-        pairs = [("Asm Sun", "Asm Carrier", clear), ("Asm Sun", "Asm Axle Center", clear), ("Asm Sun", "Asm Shim Center", 0.3),
-                 ("Asm Sun", "Asm Spacer Center 21", 0.3), ("Asm Frame", "Asm Carrier", clear),
-                 ("Asm Carrier", "Asm Axle Center", clear), ("Asm Carrier", "Asm Spacer Center 6", 0.3),
-                 ("Asm Carrier", "Asm Shim Center", 0.3)]
+        pairs = [("Asm Sun", "Asm Carrier", clear), ("Asm Sun", "Asm Axle Center", clear), ("Asm Sun", "Asm Shim Center", KIT),
+                 ("Asm Sun", "Asm Spacer Center 21", KIT), ("Asm Frame", "Asm Carrier", clear),
+                 ("Asm Carrier", "Asm Axle Center", clear), ("Asm Carrier", "Asm Spacer Center 6", KIT),
+                 ("Asm Carrier", "Asm Shim Center", KIT)]
         for i in range(N):
             pairs += [(f"Asm Planet {i}", "Asm Carrier", clear), (f"Asm Planet {i}", f"Asm Axle Planet {i}", clear),
-                      (f"Asm Planet {i}", f"Asm Spacer Planet {i}", 0.3), (f"Asm Planet {i}", f"Asm Shim Planet {i}", 0.3),
+                      (f"Asm Planet {i}", f"Asm Spacer Planet {i}", KIT), (f"Asm Planet {i}", f"Asm Shim Planet {i}", KIT),
                       (f"Asm Planet {i}", "Asm Axle Center", clear), (f"Asm Planet {(i + 1) % N}", f"Asm Planet {i}", clear),
                       ("Asm Frame", f"Asm Axle Planet {i}", clear), (f"Asm Axle Planet {i}", "Asm Sun", clear)]
         # each screw against the parts turning round it, and the frame under the carrier
@@ -386,17 +384,17 @@ def check(clear=0.4):
             h = o.get("hardware")
             k = o.name.split(" ")[2] if h else None
             if h == "Screw":
-                pairs += [("Asm Carrier", o.name, 0.3), ("Asm Sun", o.name, 0.3)] if k == "0" else \
-                         [("Asm Frame", o.name, 1.0), (f"Asm Planet {int(k) - 1}", o.name, 0.3)]
+                pairs += [("Asm Carrier", o.name, SCREW), ("Asm Sun", o.name, SCREW)] if k == "0" else \
+                         [("Asm Frame", o.name, HEAD), (f"Asm Planet {int(k) - 1}", o.name, SCREW)]
             if h == "625 Inner":
                 turning = "Asm Carrier" if k == "0" and o.matrix_world.translation.z + o.data.vertices[0].co.z < CARRIER_TOP \
                     else ("Asm Sun" if k == "0" else f"Asm Planet {int(k) - 1}")
-                pairs.append((turning, o.name, 0.3))
+                pairs.append((turning, o.name, INNER))
             if h == "625 Outer":
                 fixed = "Asm Frame" if k == "0" else "Asm Carrier"
-                pairs.append((fixed, o.name, 0.3))
+                pairs.append((fixed, o.name, OUTER))
         for a, b, need in pairs:
-            g = _gap(O[a], O[b])
+            g = gt.gap(O[a], O[b])
             if g < need:
                 problems.append(f"{tag}: {a} / {b} gap {g:.2f} (want {need})")
             print(f"[CHECK] {tag}: {a} / {b} gap {g:.2f}")
@@ -424,3 +422,9 @@ def export(out_dir=None):
     for k, v in res.items():
         print(f"[EXPORT] {k}: shells {v[1]}, non-manifold {v[2]}, missing {v[3]}")
     return res
+
+
+def render_scene():
+    """The assembly at rest, with its hardware, for cad/make.py render."""
+    assemble()
+    return "Planetary Fidget Assembly"

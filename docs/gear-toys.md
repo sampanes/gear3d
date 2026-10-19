@@ -11,6 +11,10 @@ Script: `cad/gear_toys.py` (run inside Blender, PrecisionGears add-on for the te
 (`Gear Toys Layout`), `check()` runs the checks below, `export(out_dir)` writes the STLs to
 `cad/export/gear_toys/`. File: `cad/gear_toys.blend`.
 
+Run it with `cad\make.bat gear_toys save check export` (cmd; any order of steps, see
+`cad/make.py`): a clean background Blender, exit status 1 on any problem. `render DIR` adds
+four stills; `selftest` proves the shared checks still catch what they are for.
+
 ## How it fits together
 
 - Board: 5 x 5 holes, 37.5 apart (13.0 holes, 8 thick, 187.5 square). The edge margin is
@@ -94,16 +98,19 @@ bands. Fewer turning parts need fewer bearings: start with what is on hand.
 ## Checks (`check()`)
 
 - Each meshing pair at its spacing turns 0.21 mm each way at the pitch circle (0.23 for two
-  45Ts) before the teeth touch: 15T+15T, 45T+15T, 45T+45T, 45T + compound turned over,
+  45Ts) before the teeth touch, and must stay within 0.17..0.25 (the two flanks' 0.20 of
+  thinning, -0.03 / +0.05), so a drift fails: 15T+15T, 45T+15T, 45T+45T, 45T + compound turned over,
   compound turned over + 15T turned over, two compounds three apart.
 - Pairs that must not mesh stay clear as they turn: the step pulley next to a 15T, a 15T
   next to one turned over, two 15Ts on the diagonal.
 - Round one part on its post: nothing standing still within 0.5 of it (spacer 0.70 from
-  the bore, post 1.41, bolt 2.2), each inner race 0.78 clear of the part; only the outer
-  races touch it.
+  the bore, post 1.77, bolt 2.2), each inner race at least 0.6 clear of the part (0.78);
+  only the outer races touch it. Gaps are measured both ways, and a part wholly inside
+  another (a seat cut that silently failed) counts as 0.
+- Export refuses to write a part that is not one closed solid with every piece present (the
+  last good STL stays).
 - The sample layout: no two parts' sweeps meet except gears meshing on their layer; no
   post, band post or crank sweep inside another part's sweep.
-- Every export is one closed solid.
 
 ## Safety
 

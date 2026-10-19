@@ -8,6 +8,16 @@ import { spurTrainPhases, spurGearAngle } from '../kinematics.js';
 import { PALETTE, disc, disposeObject } from '../parts.js';
 
 export class SpurTrain {
+  // The GUI's flat settings (gears, t1..t5, ...) to a train. Every setting the GUI shows must
+  // pass through here; test/mechanisms.test.js checks backlash does.
+  static fromConfig(s) {
+    const teeth = [s.t1, s.t2, s.t3, s.t4, s.t5].slice(0, s.gears);
+    return new SpurTrain({
+      teeth, module: s.module, pressureAngle: s.pressureAngle, backlash: s.backlash,
+      thickness: s.thickness, helix: s.helix, spokes: s.spokes,
+    });
+  }
+
   constructor(p) {
     this.group = new THREE.Group();
     this.teeth = p.teeth.slice();

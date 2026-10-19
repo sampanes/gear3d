@@ -51,11 +51,17 @@ circles** toggle overlays each gear's pitch (solid) and base (dashed) circle for
 teaching; the overlay lines are excluded from STL export.
 
 **Export** — the panel's **Export (STL)** folder downloads the current mechanism
-as a single binary STL, ready for slicing and 3D printing. Model units are
+as a single binary STL. Model units are
 millimetres, and the **scale ×** field applies one uniform multiplier (`1` = 1 mm)
 to the whole export. Because the entire assembly exports together, every part
 stays matched to every other — set the scale once and you never have to resize
 parts individually.
+
+The single file is the mechanism as assembled (parts in place, touching where they
+mesh): good for checking a design or test-fitting, not a print plate. Only the SATOR
+mode has **Export parts**, a kit of separate parts in print poses. If the readout
+shows a `[!]` line (teeth that would collide, planets that cannot all mesh), export
+refuses until the settings are changed.
 
 ## Mechanisms
 

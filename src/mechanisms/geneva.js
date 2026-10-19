@@ -132,9 +132,14 @@ export class Geneva {
     const { camR } = lockGeometry(c, this.n, rim);
     const camGap = 2 * g.gamma + 0.45;
     const camGeo = new THREE.CylinderGeometry(camR, camR, thk * 0.9, 48, 1, false, camGap / 2, TAU - camGap);
+    // CylinderGeometry sweeps theta from +z (x = r sin, z = r cos), so rotateX alone would
+    // leave the gap at planar -90 deg, a quarter turn behind the pin at +x; rotateZ puts it
+    // on the pin (as in satorSquare.js).
     camGeo.rotateX(Math.PI / 2);
+    camGeo.rotateZ(Math.PI / 2);
     const cam = new THREE.Mesh(camGeo, metal(PALETTE.lock, { rough: 0.6, metalness: 0.4 }));
     cam.castShadow = true;
+    this.cam = cam;
     this.driver.add(cam);
 
     // crank pin at local (a, 0), reaching forward into the star's slot plane.

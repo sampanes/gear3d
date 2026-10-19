@@ -1,0 +1,32 @@
+name: Privacy scan
+
+# The same scan the pre-commit hook runs, over every tracked file, on every push and pull
+# request. The hook is opt-in per clone and can be skipped; this cannot. A failure here
+# means a local path or an email address reached the repository: stop and purge it from
+# history, do not paper over it with a follow-up commit.
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install zstandard (reads compressed .blend files)
+        run: python -m pip install zstandard==0.23.0
+
+      - name: Scan every tracked file
+        run: python -I cad/check_private.py --all

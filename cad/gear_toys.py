@@ -513,9 +513,7 @@ def build(save=False):
         o.hide_set(True)
     place(LAYOUT)
     if save:
-        # the scene and what it uses, no window/screen data: the startup file's file browsers
-        # carry local folders (see cad/check_private.py)
-        bpy.data.libraries.write(os.path.join(_HERE, "gear_toys.blend"), {bpy.context.scene}, compress=True)
+        save_scene(os.path.join(_HERE, "gear_toys.blend"), ("Gear Toys", "Gear Toys Layout"))
     return col
 
 
@@ -709,6 +707,65 @@ def _overlap(a, b):
     return len(_tree(a).overlap(_tree(b)))
 
 
+_RAY = Vector((0.31, 0.53, 0.79)).normalized()  # off every axis, so it never runs along a face
+
+
+def _inside(tree, p):
+    """True if world point p is inside the closed mesh of `tree` (ray parity)."""
+    n, o = 0, Vector(p)
+    for _ in range(1000):
+        hit = tree.ray_cast(o, _RAY)
+        if hit[0] is None:
+            break
+        n += 1
+        o = hit[0] + _RAY * 1e-4
+    return n % 2 == 1
+
+
+def gap(a, b, step=0.5):
+    """Clearance between two closed meshes: 0 when their surfaces cross or one lies inside the
+    other (a failed Boolean can leave a bearing buried in solid plastic with no surface
+    crossing at all); otherwise the smallest distance from points along b's edges to a's
+    surface, and from a's vertices to b's surface (so a spike of a towards a broad face of b
+    is seen too)."""
+    ta, tb = _tree(a), _tree(b)
+    if ta.overlap(tb):
+        return 0.0
+    # surfaces do not cross, so each mesh is wholly inside or wholly outside the other: one
+    # point of each decides
+    if _inside(ta, b.matrix_world @ b.data.vertices[0].co) or _inside(tb, a.matrix_world @ a.data.vertices[0].co):
+        return 0.0
+    best = 99.0
+    for q in _samples(b, step):
+        hit = ta.find_nearest(q, best)
+        if hit[0] is not None:
+            best = min(best, hit[3])
+    mw = a.matrix_world
+    for v in a.data.vertices:
+        hit = tb.find_nearest(mw @ v.co, best)
+        if hit[0] is not None:
+            best = min(best, hit[3])
+    return best
+
+
+def backlash_ok(free, flanks, tol=(0.03, 0.05)):
+    """A mesh's free turn each way (mm at the pitch circle) against what its flank thinning
+    gives (`flanks`, the summed thinning of both gears): a little more is normal (the tips'
+    relief), less or much more means the geometry drifted."""
+    return all(flanks - tol[0] <= f <= flanks + tol[1] for f in free)
+
+
+def save_scene(path, collections):
+    """Write the current scene (no window/screen data: the startup file's file browsers carry
+    local folders, see cad/check_private.py) after making sure it holds nothing but these
+    collections' objects, so nothing that happened to be open in the session is published."""
+    allowed = {o for c in collections for o in bpy.data.collections[c].all_objects}
+    stray = [o.name for o in bpy.context.scene.objects if o not in allowed]
+    if stray:
+        raise RuntimeError(f"[X] not saving {os.path.basename(path)}: the scene also holds {stray[:5]}")
+    bpy.data.libraries.write(path, {bpy.context.scene}, compress=True)
+
+
 def _backlash(fixed, moving, axis_xy, r_pitch, step=0.0005):
     """Free turn of `moving` about its axis each way before it touches `fixed` (mm at its pitch circle)."""
     tf = _tree(fixed)
@@ -840,8 +897,8 @@ def check(clear=0.5):
         else:
             bl = _backlash(a, b, hole_xy(di, dj), MODULE * zq / 2)
             line += f"free turn {bl[0]:.2f} / {bl[1]:.2f} mm" + ("" if not found else "; " + "; ".join(found))
-            if min(bl) < 0.05 or max(bl) > 0.6:
-                found.append("backlash")
+            if not backlash_ok(bl, 2 * BACKLASH):
+                found.append(f"backlash {bl[0]:.2f} / {bl[1]:.2f}, want {2 * BACKLASH:.2f} each way")
         print("[CHECK]", line)
         if found:
             problems.append(line)
@@ -850,16 +907,15 @@ def check(clear=0.5):
     # and turns with it, so it may come close)
     col, rot = place([("S", "Gear_45T", (0, 0), False, False)], belts=(), band_posts=())
     part = bpy.data.objects["Lay S"]
-    tp = _tree(part)
     for o in col.objects:
         h = o.get("hardware", "")
         if o is part or o.name == "Lay Board" or h == "625 Outer":
             continue
-        worst = min(tp.find_nearest(q)[3] for q in _samples(o))
-        hit = len(tp.overlap(_tree(o)))
-        need = {"625 Inner": 0.3, "625 Seal": 0.0}.get(h, clear)
-        print(f"[CHECK] {o.name}: nearest {worst:.2f}, overlap {hit}")
-        if hit or worst < need:
+        worst = gap(part, o)
+        # a seal turns with the part (fixed in its outer race), so it may come close, not touch
+        need = {"625 Inner": 0.6, "625 Seal": 1e-6}.get(h, clear)
+        print(f"[CHECK] {o.name}: gap {worst:.2f} (want {need:.2f})")
+        if worst < need:
             problems.append(f"{o.name} {worst:.2f}")
     # 3. the sample layout
     col, rot = place(LAYOUT)
@@ -890,3 +946,9 @@ def export(out_dir=None):
     for k, v in res.items():
         print(f"[EXPORT] {k}: shells {v[1]}, non-manifold {v[2]}, missing {v[3]}")
     return res
+
+
+def render_scene():
+    """The sample layout, for cad/make.py render."""
+    place(LAYOUT)
+    return "Gear Toys Layout"
