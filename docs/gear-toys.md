@@ -19,9 +19,12 @@ Script: `cad/gear_toys.py` (run inside Blender, PrecisionGears add-on for the te
 - Posts: a peg presses into a hole (three crush ribs), a body stands 5 off the board, and a
   boss (8.0 across) on top carries the gear's lower inner race. An M5 nut is pushed up into
   a hex pocket in the bottom of the peg.
-- Turning parts: two 8 mm layers, 16 tall, with a 625 pressed into each end (16.0 seat, 5
-  deep). The clamp is the SATOR one: each outer race stops on a ledge (13.5 across: a 625's
-  housing shoulder must stay under 13.6, and its seal starts at 13.3), a loose printed
+- Turning parts: two 8 mm layers, 16 tall, with a 625 pressed into each end (16.2 seat, 5
+  deep, a 0.4 lead-in at each mouth; 16.0 came out tight in the test gear). The clamp is the
+  SATOR one: the top outer race stops on a ledge (13.5 across: a 625's housing shoulder must
+  stay under 13.6, and its seal starts at 13.3); the bed-side one stops on a 45 deg cone that
+  meets its outer corner (a flat ceiling there has nothing under it while printing, and on
+  the test gear it sagged into the seat as strings). A loose printed
   spacer (8.0 x 5.5 x 6.0) runs between the inner races down a 9.4 bore, and a printed
   washer (8.0 x 5.5 x 1.5) sits under the bolt head. Tightened, the load runs bolt head,
   washer, inner race, spacer, inner race, post boss, nut: never through the balls, never on

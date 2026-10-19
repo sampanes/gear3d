@@ -6,7 +6,8 @@ check()          -- every pair meshes with backlash, nothing still touches anyth
 export(out_dir)  -- one STL per part design, named by how many a set needs
 
 Every turning part is two 8 mm layers (16 tall) with a 625 bearing (5 x 16 x 5) pressed into
-each end, held the way the SATOR toggle groups are: each outer race stops on a narrow ledge,
+each end, held the way the SATOR toggle groups are: each outer race stops on a narrow ledge
+(the bed-side one on a 45 deg cone, so it prints without support),
 a loose printed spacer runs between the inner races, and the clamp (an M5 bolt down into a
 nut trapped in the post) runs bolt head, washer, inner race, spacer, inner race, post boss,
 nut: never through the balls. Each part is symmetric, so turned over it swaps its layers:
@@ -59,7 +60,9 @@ GEAR = dict(module=MODULE, pressure_angle=PRESSURE, helix_angle=0.0, herringbone
 
 # ==== 625 bearing (5 x 16 x 5): d1 8.4, D2 13.3, shaft shoulder 7.4..8.3, housing shoulder <= 13.6 ====
 BEARING_W = 5.0
-SEAT_R = 8.0             # 16.0 hole: snug on the fit coupon
+SEAT_R = 8.1             # 16.2 hole: 16.0 printed tight in a part (snug only on the fit coupon)
+LEAD = 0.4               # 45 deg lead-in at each seat mouth (takes the first-layer squish)
+CONE_AT = 7.8            # the cone over a bed-side seat meets the outer race's corner here
 LEDGE_R = 13.5 / 2       # outer race stops on a ledge from here out
 RELIEF_H = 0.6           # inside the ledge the plug stands back this far
 BORE_R = 9.4 / 2         # bore through the plug, round the spacer
@@ -303,11 +306,26 @@ def _pulley_prof(g, z0):
             (f, b - lip), (f, b), (BOLT_R + 0.5, b)]
 
 
+def seat_cut_prof(f0, f1, z_bot, z_top):
+    """(r, z) loop cutting a pair of 625 seats: one from z_bot up to f0 (the bed side), one
+    from f1 up to z_top. The bed-side seat stops on a 45 deg cone that meets the outer race's
+    corner at f0: a flat ceiling there prints as an overhang with nothing under it, and on
+    the test gear it sagged into the seat. The far seat stops on a flat ledge; inside it the
+    plug stands RELIEF_H back off the seal."""
+    s, b, zt = SEAT_R, BORE_R, f1 - RELIEF_H
+    zc = f0 - (s - CONE_AT)       # cone at the seat wall
+    zb = zc + (s - b)             # cone at the bore
+    if zb > zt + 1e-6:
+        raise ValueError(f"seats {f0}..{f1} too close for the cone")
+    pts = [(0, z_bot - 1.0), (s + LEAD, z_bot - 1.0), (s + LEAD, z_bot), (s, z_bot + LEAD), (s, zc), (b, zb)]
+    if zb < zt - 1e-6:
+        pts.append((b, zt))
+    return pts + [(LEDGE_R, zt), (LEDGE_R, f1), (s, f1), (s, z_top - LEAD), (s + LEAD, z_top), (s + LEAD, z_top + 1.0),
+                  (0, z_top + 1.0)]
+
+
 def _bearing_cut_prof():
-    f0, f1 = BEARING_W, PART_H - BEARING_W
-    return [(0, -1.0), (SEAT_R, -1.0), (SEAT_R, f0), (LEDGE_R, f0), (LEDGE_R, f0 + RELIEF_H),
-            (BORE_R, f0 + RELIEF_H), (BORE_R, f1 - RELIEF_H), (LEDGE_R, f1 - RELIEF_H), (LEDGE_R, f1),
-            (SEAT_R, f1), (SEAT_R, PART_H + 1.0), (0, PART_H + 1.0)]
+    return seat_cut_prof(BEARING_W, PART_H - BEARING_W, 0.0, PART_H)
 
 
 def _reach(spec, layer):
@@ -659,7 +677,7 @@ def _hardware(col, name, xy):
                                 (KIT_BORE_R, top - BEARING_W)]), (0.9, 0.45, 0.1, 1)),
     ]
     for z0 in (BED, top - BEARING_W):
-        parts += [("625 Outer", _lathe("o", [(13.3 / 2, z0), (SEAT_R, z0), (SEAT_R, z0 + BEARING_W), (13.3 / 2, z0 + BEARING_W)]), steel),
+        parts += [("625 Outer", _lathe("o", [(13.3 / 2, z0), (8.0, z0), (8.0, z0 + BEARING_W), (13.3 / 2, z0 + BEARING_W)]), steel),
                   ("625 Seal", _lathe("e", [(4.2, z0 + 0.25), (13.3 / 2, z0 + 0.25), (13.3 / 2, z0 + BEARING_W - 0.25),
                                             (4.2, z0 + BEARING_W - 0.25)]), black),
                   ("625 Inner", _lathe("i", [(2.5, z0), (4.2, z0), (4.2, z0 + BEARING_W), (2.5, z0 + BEARING_W)]), steel)]
