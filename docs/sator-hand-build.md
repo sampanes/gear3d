@@ -2,8 +2,8 @@
 
 Single source of truth for the hand-built (Blender) SATOR mechanism. When a number
 changes, change it here first, then in the model. Name Blender objects to match
-(e.g. `Gear_Middle_64T`). Working `.blend` files live in `cad/` and are git-ignored;
-publish exported STLs/renders instead.
+(e.g. `Gear_Middle_64T`). The `.blend` files and the exported STLs in `cad/` are tracked
+(see "Repo hygiene for the binaries" below); `.blend1` backups are not. Slice only the STLs.
 
 ## Gear train
 

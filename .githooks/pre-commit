@@ -11,14 +11,16 @@ echo "pre-commit -> npm run lint (if present)"
 npm run lint --if-present --silent
 
 echo "pre-commit -> privacy scan of staged files (local paths, emails)"
-# compressed .blend files need zstandard; Blender's bundled Python has it
+# compressed .blend files need zstandard; Blender's bundled Python has it.
+# Probe with the same -I the scan runs under: -I ignores a `pip install --user`
+# site, so a probe without it picks a Python whose scan then fails to import.
 py=""
 for c in python python3 /c/Program\ Files/Blender\ Foundation/Blender*/*/python/bin/python.exe; do
-  if "$c" -c "import zstandard" >/dev/null 2>&1; then py="$c"; break; fi
+  if "$c" -I -c "import zstandard" >/dev/null 2>&1; then py="$c"; break; fi
 done
 if [ -z "$py" ]; then
   if git diff --cached --name-only --diff-filter=ACMR | grep -qiE '\.blend$'; then
-    echo "[X] a .blend is staged and no Python with zstandard was found (install Blender, or pip install zstandard)"
+    echo "[X] a .blend is staged and no Python with zstandard was found under -I (install Blender, or pip install zstandard system-wide or in a venv; a --user install is not visible under -I)"
     exit 1
   fi
   py=python

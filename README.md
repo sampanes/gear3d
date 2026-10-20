@@ -8,7 +8,13 @@ It also includes a kinematic **SATOR-square** mode — a 5×5 turning-letter wal
 piece that reads upright again every 90°, built from those same primitives.
 
 Built with [Three.js](https://threejs.org/) + [Vite](https://vitejs.dev/) +
-[lil-gui](https://lil-gui.georgealways.com/).
+[lil-gui](https://lil-gui.georgealways.com/). Live at
+[sampanes.github.io/gear3d](https://sampanes.github.io/gear3d/), built from `main` by
+`.github/workflows/deploy.yml`.
+
+The physical versions live under `cad/`: Blender-scripted, printable models of the SATOR
+square's gear train, a pegboard gear set, and a planetary fidget spinner (see
+[Printable builds](#printable-builds-cad)).
 
 ## Run
 
@@ -131,21 +137,50 @@ turns per board turn) for variety. The per-tile motion is the closed-form
 letters (decor) are excluded and printed separately. Tune the cell size and
 board thickness.
 
+## Printable builds (`cad/`)
+
+The web app animates and checks mechanisms; the ones that get printed are modelled in
+[Blender](https://www.blender.org/) (PrecisionGears add-on for the teeth), scripted under
+`cad/`, and exported as single watertight STLs under `cad/export/`, which are the only files
+to slice. Every export checks that the part is one closed solid with every piece present
+and writes nothing otherwise.
+
+| Model | What it is | Doc |
+| --- | --- | --- |
+| SATOR hand build | the SATOR square as a real gear train: a fixed 64T middle gear, 64T letter gears on 16T idlers, four 96T planets, P stacks on 608 bearings, and double-Geneva **O toggle** units with their own stand | [docs/sator-hand-build.md](docs/sator-hand-build.md) |
+| Gear toys | a pegboard gear set for kids on 625 bearings, every gear grooved for a rubber band as belt or spring | [docs/gear-toys.md](docs/gear-toys.md) |
+| Planetary fidget | a hand-held 4:1 planetary gearset on 625 bearings and #8 screws | [docs/planetary-fidget.md](docs/planetary-fidget.md) |
+
+`gear_toys` and `planetary_fidget` build, check, export and render in a clean background
+Blender, exit status 1 on any problem:
+
+```bat
+cad\make.bat planetary_fidget save check export render %USERPROFILE%\Downloads
+cad\make.bat gear_toys selftest     # proves the shared checks still catch what they are for
+```
+
+The SATOR hand build is built in the Blender UI with the `cad/sator_*.py`, `geneva.py`,
+`crossings.py` and `toggle_stand.py` helpers; `cad/sator_hand_build.blend` is its source and
+is committed at milestones. `cad/check_private.py` (the pre-commit hook and the Privacy scan
+workflow) refuses any tracked file that carries a local path or an email, `.blend` included.
+
 ## Layout
 
 ```
 src/
-  main.js              loop, mode switching, GUI wiring
+  main.js              loop, mode switching, GUI wiring, readout ([!] lines block export)
   scene.js             renderer, lights, studio environment, shadow wall, grid, OrbitControls (middle = orbit)
   ui.js                lil-gui panel
-  kinematics.js        pure motion math (spur, Geneva, double-Geneva, internal, planetary, bevel)
+  kinematics.js        pure motion math (spur, Geneva, double-Geneva, internal, planetary, bevel, SATOR tiles)
   math.js              shared helpers
   parts.js             materials + reusable part builders
   overlays.js          educational pitch/base circle overlays
   export.js            binary STL export (whole mechanism, uniform mm scale)
+  zip.js               store-only ZIP writer for the SATOR print kit
   gears/
-    involute.js        involute tooth profile
-    gear.js            extruded gear mesh
+    involute.js        involute tooth profile: trochoidal root fillet / undercut, backlash
+    gear.js            extruded gear mesh (spokes, bores)
+    meshcheck.js       tooth interference from posed outlines (internal + planetary sets)
   mechanisms/
     spurTrain.js
     geneva.js
@@ -153,9 +188,22 @@ src/
     internalGear.js
     planetary.js
     bevelGears.js
+    satorSquare.js     SATOR square mode, per-cell behaviors, O-flip drive, parts() print kit
+test/                  node:test suites (npm test)
+tools/shoot.mjs        offline headless screenshots -> tools/shots/
+cad/                   Blender-built printable models (see "Printable builds")
+  make.py, make.bat    build / check / export / render a model in a clean background Blender
+  check_private.py     privacy scan (local paths, emails) for the hook and CI
+  export/              the STLs to slice (SATOR board + NE toggle kit; gear_toys/; planetary_fidget/)
+.github/workflows/     deploy.yml (Pages from main), privacy.yml (scan on every push)
 ```
 
 ## Docs
 
-- [docs/roadmap.md](docs/roadmap.md) — project goal and feature status.
-- [docs/sator-square.md](docs/sator-square.md) — design for a planned SATOR-square mode.
+- [docs/roadmap.md](docs/roadmap.md) — project goal, feature status, the repo-weight plan.
+- [docs/sator-square.md](docs/sator-square.md) — the SATOR square mode: tile kinematics, the O-flip drive derivation, the print kit.
+- [docs/sator-modular-drive.md](docs/sator-modular-drive.md) — Tier-2 per-cell drive + cohesion solver spec (design only, parked).
+- [docs/fillet-design.md](docs/fillet-design.md) — trochoidal root fillet / undercut derivation and the backlash model.
+- [docs/sator-hand-build.md](docs/sator-hand-build.md) — the physical SATOR build: gear train, toggle units, stand, bearings, open questions.
+- [docs/gear-toys.md](docs/gear-toys.md) — the pegboard gear set.
+- [docs/planetary-fidget.md](docs/planetary-fidget.md) — the planetary fidget spinner.
