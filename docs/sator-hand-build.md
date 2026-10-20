@@ -157,8 +157,22 @@ per half board turn (see "O toggle units" below).
 
 ## Repo hygiene for the binaries
 
-- `cad/sator_hand_build.blend` and `cad/export/*.stl` are tracked; `.blend1` backups are not.
-  Commit the .blend at milestones (each version adds ~5 MB to history).
+- `cad/*.blend` and `cad/export/*.stl` are tracked; `.blend1` backups are not. Git keeps every
+  version of them forever and they do not delta-compress. Measured 2026-10-20: 29 versions of
+  `sator_hand_build.blend` (30-52 MB each) and 20 re-exports of the board set (~115 MB each)
+  put 1.23 GB of old binaries behind a checkout that needs 163 MB. The move to LFS or Releases
+  is planned in `docs/roadmap.md` ("Repo weight"); until it happens, the discipline is:
+  - **Commit the hand-build `.blend` at milestones only**: a printed part, a settled fit, a
+    finished unit. Not after every carve. Scripts and docs commit as often as you like; stage
+    them by pathspec and leave the `.blend` modified in the tree until the milestone. Each
+    `.blend` commit is ~50 MB of history that only a rewrite can remove.
+  - **Re-export and commit only the STLs of parts that changed.** `export_board()`,
+    `export_toggle_parts()`, `export_kit()` and `export_stand()` rewrite every file they
+    cover, and a re-export of an unchanged part can still differ byte for byte (union order,
+    triangulation), which git stores as a new 1-16 MB blob. Use `export_stl(gear)` for one
+    part, and `git restore -- cad/export/<unchanged>.stl` for the rest.
+  - **Before each push**, `git diff --stat origin/main..HEAD -- '*.blend' '*.stl'`: the MB
+    in that list are the MB the repository grows for good.
 - `cad/sator_lab.blend` is a small sandbox (~0.4 MB) for trying ideas before they touch the main
   file: the SE letters R A A S (same coordinates as the main file) and a keyframed mock of the
   A swap (Open questions). Build things there first, then port the script to the main file.
