@@ -150,7 +150,7 @@ and writes nothing otherwise.
 | SATOR hand build | the SATOR square as a real gear train: a fixed 64T middle gear, 64T letter gears on 16T idlers, four 96T planets, P stacks on 608 bearings, and double-Geneva **O toggle** units with their own stand | [docs/sator-hand-build.md](docs/sator-hand-build.md) |
 | Gear toys | a pegboard gear set for kids on 625 bearings, every gear grooved for a rubber band as belt or spring | [docs/gear-toys.md](docs/gear-toys.md) |
 | Planetary fidget | a hand-held 4:1 planetary gearset on 625 bearings and #8 screws | [docs/planetary-fidget.md](docs/planetary-fidget.md) |
-| Sheet screw coupon | four coarse printed screws for a plain 17 mm hole in 2 mm sheet, varying crest oversize and groove width | [docs/sheet-screw.md](docs/sheet-screw.md) |
+| Sheet screw coupon | coarse printed screws for a plain 17 mm hole in 2 mm sheet, a row of outside diameters numbered by dots | [docs/sheet-screw.md](docs/sheet-screw.md) |
 
 `gear_toys`, `planetary_fidget` and `sheet_screw` build, check, export and render in a clean background
 Blender, exit status 1 on any problem:
