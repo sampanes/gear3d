@@ -150,8 +150,9 @@ and writes nothing otherwise.
 | SATOR hand build | the SATOR square as a real gear train: a fixed 64T middle gear, 64T letter gears on 16T idlers, four 96T planets, P stacks on 608 bearings, and double-Geneva **O toggle** units with their own stand | [docs/sator-hand-build.md](docs/sator-hand-build.md) |
 | Gear toys | a pegboard gear set for kids on 625 bearings, every gear grooved for a rubber band as belt or spring | [docs/gear-toys.md](docs/gear-toys.md) |
 | Planetary fidget | a hand-held 4:1 planetary gearset on 625 bearings and #8 screws | [docs/planetary-fidget.md](docs/planetary-fidget.md) |
+| Sheet screw coupon | four coarse printed screws for a plain 17 mm hole in 2 mm sheet, varying crest oversize and groove width | [docs/sheet-screw.md](docs/sheet-screw.md) |
 
-`gear_toys` and `planetary_fidget` build, check, export and render in a clean background
+`gear_toys`, `planetary_fidget` and `sheet_screw` build, check, export and render in a clean background
 Blender, exit status 1 on any problem:
 
 ```bat
@@ -194,7 +195,7 @@ tools/shoot.mjs        offline headless screenshots -> tools/shots/
 cad/                   Blender-built printable models (see "Printable builds")
   make.py, make.bat    build / check / export / render a model in a clean background Blender
   check_private.py     privacy scan (local paths, emails) for the hook and CI
-  export/              the STLs to slice (SATOR board + NE toggle kit; gear_toys/; planetary_fidget/)
+  export/              the STLs to slice (SATOR board + NE toggle kit; gear_toys/; planetary_fidget/; sheet_screw/)
 .github/workflows/     deploy.yml (Pages from main), privacy.yml (scan on every push)
 ```
 
@@ -207,3 +208,4 @@ cad/                   Blender-built printable models (see "Printable builds")
 - [docs/sator-hand-build.md](docs/sator-hand-build.md) — the physical SATOR build: gear train, toggle units, stand, bearings, open questions.
 - [docs/gear-toys.md](docs/gear-toys.md) — the pegboard gear set.
 - [docs/planetary-fidget.md](docs/planetary-fidget.md) — the planetary fidget spinner.
+- [docs/sheet-screw.md](docs/sheet-screw.md) -- the sheet screw coupon.

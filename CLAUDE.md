@@ -4,7 +4,7 @@ Two tracks share the repo. The web app (`src/`, `test/`) animates and checks mec
 the Blender scripts under `cad/` make the ones that get printed. Facts about a model live in
 its doc under `docs/` and win over code comments or memory: `docs/sator-hand-build.md` is the
 single source of truth for the physical SATOR build, `docs/gear-toys.md` and
-`docs/planetary-fidget.md` for the two toys, `docs/roadmap.md` for status and the repo-weight
+`docs/planetary-fidget.md` for the two toys, `docs/sheet-screw.md` for the screw coupon, `docs/roadmap.md` for status and the repo-weight
 plan, `docs/sator-square.md` and `docs/fillet-design.md` for the web app's SATOR mode and
 tooth geometry. When a number changes, change the doc first, then the model.
 
@@ -35,7 +35,7 @@ to LFS or Releases, which is John's decision and runs on a full clone:
 
 ## Running the CAD scripts
 
-`cad\make.bat <gear_toys|planetary_fidget> save check export [render DIR]` builds in a clean
+`cad\make.bat <gear_toys|planetary_fidget|sheet_screw> save check export [render DIR]` builds in a clean
 background Blender (PrecisionGears add-on) and exits 1 on any problem; `selftest` proves the
 shared checks still catch what they are for. Slice only `cad/export/*.stl`: every export is
 one watertight solid or it is not written. The SATOR hand build runs its helpers
