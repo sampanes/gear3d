@@ -151,8 +151,9 @@ and writes nothing otherwise.
 | Gear toys | a pegboard gear set for kids on 625 bearings, every gear grooved for a rubber band as belt or spring | [docs/gear-toys.md](docs/gear-toys.md) |
 | Planetary fidget | a hand-held 4:1 planetary gearset on 625 bearings and #8 screws | [docs/planetary-fidget.md](docs/planetary-fidget.md) |
 | Sheet screw coupon | coarse printed screws for a plain 17 mm hole in 2 mm sheet, a row of outside diameters numbered by dots | [docs/sheet-screw.md](docs/sheet-screw.md) |
+| Sheet hook | one-piece headphone hook for a stepped hole in a two-layer sheet wall: plug, tongue and lip, no screw | [docs/sheet-hook.md](docs/sheet-hook.md) |
 
-`gear_toys`, `planetary_fidget` and `sheet_screw` build, check, export and render in a clean background
+`gear_toys`, `planetary_fidget`, `sheet_screw` and `sheet_hook` build, check, export and render in a clean background
 Blender, exit status 1 on any problem:
 
 ```bat
@@ -195,7 +196,7 @@ tools/shoot.mjs        offline headless screenshots -> tools/shots/
 cad/                   Blender-built printable models (see "Printable builds")
   make.py, make.bat    build / check / export / render a model in a clean background Blender
   check_private.py     privacy scan (local paths, emails) for the hook and CI
-  export/              the STLs to slice (SATOR board + NE toggle kit; gear_toys/; planetary_fidget/; sheet_screw/)
+  export/              the STLs to slice (SATOR board + NE toggle kit; gear_toys/; planetary_fidget/; sheet_screw/; sheet_hook/)
 .github/workflows/     deploy.yml (Pages from main), privacy.yml (scan on every push)
 ```
 
@@ -209,3 +210,4 @@ cad/                   Blender-built printable models (see "Printable builds")
 - [docs/gear-toys.md](docs/gear-toys.md) — the pegboard gear set.
 - [docs/planetary-fidget.md](docs/planetary-fidget.md) — the planetary fidget spinner.
 - [docs/sheet-screw.md](docs/sheet-screw.md) -- the sheet screw coupon.
+- [docs/sheet-hook.md](docs/sheet-hook.md) -- the headphone hook that replaced it.

@@ -7,7 +7,11 @@ printed as a row of variants to find the one that fits. Script: `cad/sheet_screw
 Run it with `cad\make.bat sheet_screw save check export render %USERPROFILE%\Downloads`
 (cmd; see `cad/make.py`): a clean background Blender, exit status 1 on any problem.
 
-## Round 2 (current)
+## Round 2 (2026-10-21): the hole is 16.6
+
+Result: 1 and 2 go in (2 pushes straight in, no twisting), 3 to 5 will not go in at all.
+A printed thread cannot screw into a plain hole, so this ends the screw: the hole turned out
+to be the inner of two stepped holes, and `docs/sheet-hook.md` hangs from it instead.
 
 Only the thread's outside (crest) diameter changes, in 0.3 steps across the hole:
 
