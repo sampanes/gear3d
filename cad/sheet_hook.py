@@ -9,8 +9,9 @@ export(out_dir)  -- one STL
 
 Model frame: the wall's front face is y = 0, the hook sits in front (y > 0), the wall behind
 (y < 0); z up; the hole's centre at x = z = 0. The plate and arm are one side profile (y, z)
-extruded across x; the plug and the tongue are extruded the other ways. Printed lying on its
-side (x up): every layer is a side profile, so no overhangs and the arm bends along its layers.
+extruded across x; plug, tongue and disc are round sections (x, z) lofted along y, and the
+whole is cut flat at x = +-PLATE_W / 2. Printed lying on that flat (x up): the arm bends along
+its layers and every part starts on the bed, so no supports.
 """
 
 import importlib.util
@@ -45,22 +46,28 @@ BAND_R, BAND_T = 85.0, 20.0   # headband: inner radius, thickness with its cushi
 SIDE_DROP = (49.2, 34.4, 156.0)   # side wall reaches this far down from the ceiling: at the face,
                                   # at its far end, and how far out that end is
 
+SCREW_HEAD = 16.0        # behind the face, on the hole's axis
+
 # ==== the hook ====
+# Sections are overlaps of circles (x, z). Hanging, the hook sits DROP lower than the model
+# frame (the plug rests on the front hole's bottom); lifted to the stop, LIFT higher than that.
 LIFT = 5.6               # lift to put it on / take it off
-PLUG_R = 11.0            # plug in the front hole (0.22 radial clearance)
-PLUG_TOP = -2.6          # plug cut flat here so it still fits the hole when lifted
+PLUG_R = 11.0            # plug's circles, in the 22.45 front hole
+DROP = OUTER_D / 2 - PLUG_R
 PLUG_DEPTH = 2.5         # into the 2.75 front layer: the plate seats on the face
-TONGUE_W = 10.0          # through the inner hole
-TONGUE_Z = (-6.0, -0.5)
-LIP_GAP = 0.5            # lip's front face behind the inner layer's back
-LIP_T, LIP_BOTTOM = 3.0, -11.5
-PLATE_W, PLATE_T = 26.0, 5.0
+PLUG_LEAD = 0.5          # chamfer round the plug's back edge
+TONGUE_R = (7.9, 7.6)    # tongue's circles: on the hole centre hanging, on it lifted
+DISC_R = 7.8             # disc behind the inner layer: on the hole centre lifted
+DISC_GAP = 0.5           # disc's front face behind the inner layer's back
+DISC_T = 5.0
+DISC_LEAD = 1.0          # chamfer round the disc's back edge
+PLATE_W, PLATE_T = 14.0, 5.0
 PLATE_TOP, FOOT = 8.0, -60.0
 ARM_TOP = -52.0          # saddle top: the headband's top, cushion and all, clears the
                          # side wall's lower edge
 SADDLE = (16.0, 56.0)    # flat saddle along y (a headband is about 40 wide)
 TIP, TIP_H = 62.0, 6.0   # tip lip keeps the band on
-CHAMFER = 3.0            # 45-degree chamfers on the saddle's top edges
+CHAMFER = 2.0            # 45-degree chamfers on the saddle's top edges
 
 WALL_COLOR = (0.55, 0.55, 0.58, 1)
 HOOK_COLOR = (0.9, 0.42, 0.12, 1)
@@ -114,41 +121,76 @@ def side_profile():
             (0.0, PLATE_TOP)]
 
 
-def lip_y():
-    """Front and back face of the lip (y)."""
-    front = -2 * LAYER - LIP_GAP
-    return front, front - LIP_T
+def disc_y():
+    """Front and back face of the disc (y)."""
+    front = -2 * LAYER - DISC_GAP
+    return front, front - DISC_T
 
 
-def tongue_profile():
-    """Tongue and lip in (y, z): the tongue from inside the plate back through both layers,
-    the lip dropping behind the inner layer (its back bottom corner chamfered)."""
-    t0, t1 = TONGUE_Z
-    f, b = lip_y()
-    return [(0.4, t0), (0.4, t1), (b, t1), (b, LIP_BOTTOM + 1.0), (b + 1.0, LIP_BOTTOM),
-            (f, LIP_BOTTOM), (f, t0)]
+def section(hi, lo, w, n=32):
+    """(x, z) outline, counter-clockwise, of the overlap of circle hi = (centre z, r) and the
+    circle lo below it, clipped to |x| <= w: hi's lower arc, then lo's upper arc."""
+    (zh, rh), (zl, rl) = hi, lo
+    xs = [-w + 2 * w * k / (n - 1) for k in range(n)]
+    return ([(x, zh - math.sqrt(rh * rh - x * x)) for x in xs] +
+            [(x, zl + math.sqrt(rl * rl - x * x)) for x in reversed(xs)])
 
 
-def plug_profile(n=24):
-    """Plug in (x, z): the circle PLUG_R below PLUG_TOP."""
-    a = math.acos(-PLUG_TOP / PLUG_R)      # half-angle from the bottom to the cut
-    pts = [(PLUG_R * math.sin(t), -PLUG_R * math.cos(t)) for t in
-           (-a + 2 * a * k / n for k in range(n + 1))]
-    return pts
+def plug_circles(c=0.0):
+    """Plug: the upper circle hangs on the front hole's bottom; the lower one meets the hole's
+    top at the lift stop. c shrinks both (chamfer)."""
+    return (0.0, PLUG_R - c), (-(LIFT - 2 * DROP), PLUG_R - c)
+
+
+def tongue_circles():
+    return (DROP, TONGUE_R[0]), (DROP - LIFT, TONGUE_R[1])
+
+
+def disc_circles(c=0.0):
+    return (DROP - LIFT, DISC_R - c), (DROP - LIFT, DISC_R - c)
+
+
+def _loft(name, rings):
+    """Closed solid through [(y, outline (x, z))], outlines of equal length."""
+    bm = bmesh.new()
+    vs = [[bm.verts.new((x, y, z)) for x, z in poly] for y, poly in rings]
+    n = len(vs[0])
+    for r0, r1 in zip(vs, vs[1:]):
+        for i in range(n):
+            j = (i + 1) % n
+            bm.faces.new((r0[i], r0[j], r1[j], r1[i]))
+    bm.faces.new(vs[0])
+    bm.faces.new(vs[-1][::-1])
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    me = bpy.data.meshes.new(name)
+    bm.to_mesh(me)
+    bm.free()
+    return me
 
 
 def hook_mesh():
-    me = _prism("Sheet Hook", side_profile(), "x", -PLATE_W / 2, PLATE_W / 2)
+    w = PLATE_W / 2
+    me = _prism("Sheet Hook", side_profile(), "x", -w - 0.5, w + 0.5)
+    wc = w + 0.3               # sections run past the cut so it makes every flat side at once
+    me = _boolean(me, _loft("Plug", [(0.8, section(*plug_circles(), wc)),
+                                     (-PLUG_DEPTH + PLUG_LEAD, section(*plug_circles(), wc)),
+                                     (-PLUG_DEPTH, section(*plug_circles(PLUG_LEAD), wc - PLUG_LEAD))]), "UNION")
+    f, b = disc_y()
+    me = _boolean(me, _loft("Tongue", [(-PLUG_DEPTH + 0.3, section(*tongue_circles(), w + 0.15)),
+                                       (f - 0.4, section(*tongue_circles(), w + 0.15))]), "UNION")
+    me = _boolean(me, _loft("Disc", [(f, section(*disc_circles(), wc)),
+                                     (b + DISC_LEAD, section(*disc_circles(), wc)),
+                                     (b, section(*disc_circles(DISC_LEAD), wc - DISC_LEAD))]), "UNION")
+    for sx in (1, -1):        # the flat sides
+        box = [(-40, -80), (90, -80), (90, 40), (-40, 40)]
+        me = _boolean(me, _prism("Cut", box, "x", sx * w, sx * (w + 20)), "DIFFERENCE")
     s0, s1 = SADDLE
     for sx in (1, -1):        # 45-degree chamfers along the saddle's top edges
-        e = PLATE_W / 2
-        tri = [(sx * (e - CHAMFER - 0.5), ARM_TOP + 0.5), (sx * (e + 0.5), ARM_TOP - CHAMFER - 0.5),
-               (sx * (e + 0.5), ARM_TOP + 0.5)]
+        tri = [(sx * (w - CHAMFER - 0.5), ARM_TOP + 0.5), (sx * (w + 0.5), ARM_TOP - CHAMFER - 0.5),
+               (sx * (w + 0.5), ARM_TOP + 0.5)]
         if sx < 0:
             tri = tri[::-1]
         me = _boolean(me, _prism("Chamfer", tri, "y", s0 + 0.5, s1 - 0.5), "DIFFERENCE")
-    me = _boolean(me, _prism("Plug", plug_profile(), "y", 0.8, -PLUG_DEPTH), "UNION")
-    me = _boolean(me, _prism("Tongue", tongue_profile(), "x", -TONGUE_W / 2, TONGUE_W / 2), "UNION")
     return me
 
 
@@ -223,33 +265,42 @@ def side_wall_bottom(y):
     return CEILING - (at_face + (at_end - at_face) * min(1.0, y / length))
 
 
+def _farthest(poly, dz):
+    """Largest distance of the outline, moved up dz, from the hole's axis."""
+    return max(math.hypot(x, z + dz) for x, z in poly)
+
+
 def fit_numbers():
     """[(what, value, limit, ok)] for the fit, from the dimensions alone."""
     out = []
     r_out, r_in = OUTER_D / 2, INNER_D / 2
-    drop = r_out - PLUG_R                 # hanging, the plug rests on the front hole's bottom
-    # lifted: every plug outline point inside the front hole
-    worst = max(math.hypot(x, z + LIFT) for x, z in plug_profile(96))
-    out.append(("plug lifted, farthest from the front hole's centre", worst, r_out - 0.1, worst <= r_out - 0.1))
-    # lifted: tongue and lip section (x within +-TONGUE_W/2, z from LIP_BOTTOM to the tongue top)
-    corners = [(sx * TONGUE_W / 2, z + LIFT - drop) for sx in (1, -1) for z in (LIP_BOTTOM, TONGUE_Z[1])]
-    worst = max(math.hypot(x, z) for x, z in corners)
-    out.append(("tongue and lip lifted, farthest from the inner hole's centre", worst, r_in - 0.3, worst <= r_in - 0.3))
-    # hanging: the tongue clears the inner hole, the lip overlaps the inner layer below it
-    edge = -math.sqrt(r_in ** 2 - (TONGUE_W / 2) ** 2)     # inner hole edge under the tongue's corner
-    gap = (TONGUE_Z[0] - drop) - edge
-    out.append(("tongue above the inner hole's edge, hanging", gap, 0.3, gap >= 0.3))
-    overlap = -r_in - (LIP_BOTTOM - drop)
-    out.append(("lip below the inner hole, hanging", overlap, 2.5, overlap >= 2.5))
-    room = CEILING - (PLATE_TOP - drop + LIFT)
+    w = PLATE_W / 2
+    plug, tongue = section(*plug_circles(), w, 96), section(*tongue_circles(), w, 96)
+    disc = section(*disc_circles(), w, 96)
+    up = LIFT - DROP                       # model frame -> lifted to the stop
+    v = r_out - _farthest(plug, up)
+    out.append(("plug inside the front hole at the lift stop", v, 0.0, v >= -1e-6))
+    v = r_in - max(_farthest(disc, up), _farthest(tongue, up))
+    out.append(("disc and tongue clear of the inner hole at the lift stop", v, 0.4, v >= 0.4))
+    v = r_in - _farthest(tongue, -DROP)
+    out.append(("tongue clear of the inner hole, hanging", v, 0.3, v >= 0.3))
+    # hanging, the disc reaches below the inner hole: at the middle and at its flat sides
+    zc = -LIFT
+    v = -r_in - (zc - DISC_R)
+    out.append(("disc below the inner hole, hanging, middle", v, 3.0, v >= 3.0))
+    v = -math.sqrt(r_in ** 2 - w * w) - (zc - math.sqrt(DISC_R ** 2 - w * w))
+    out.append(("disc below the inner hole, hanging, flat sides", v, 3.0, v >= 3.0))
+    v = SCREW_HEAD + disc_y()[1]
+    out.append(("disc's back short of the screw head", v, 3.0, v >= 3.0))
+    room = CEILING - (PLATE_TOP + up)
     out.append(("ceiling above the lifted plate", room, 2.0, room >= 2.0))
     # the top of the headband's cushion, where the band passes the side wall, stays below the
     # wall's lower edge
     sag = BAND_R - math.sqrt(BAND_R ** 2 - SIDE_X ** 2)
-    worst = max(ARM_TOP - drop + BAND_T - sag - side_wall_bottom(y) for y in range(int(SADDLE[0]), int(TIP) + 1))
+    worst = max(ARM_TOP - DROP + BAND_T - sag - side_wall_bottom(y) for y in range(int(SADDLE[0]), int(TIP) + 1))
     out.append(("headband cushion top below the side wall's lower edge (most negative is best)", worst, -4.0,
                 worst <= -4.0))
-    out.append(("plate edge from the side wall", SIDE_X - PLATE_W / 2, 2.0, SIDE_X - PLATE_W / 2 >= 2.0))
+    out.append(("plate edge from the side wall", SIDE_X - w, 2.0, SIDE_X - w >= 2.0))
     return out
 
 
@@ -264,13 +315,16 @@ def check():
     bm.from_mesh(bpy.data.objects["Sheet_Hook"].data)
     tree = BVHTree.FromBMesh(bm)
     bm.free()
-    f, b = lip_y()
+    f, b = disc_y()
+    zd = DROP - LIFT
     probes = [("plate", (0, PLATE_T / 2, 0), True),
-              ("plug", (0, -PLUG_DEPTH / 2, -8), True),
-              ("tongue in the inner layer", (0, -1.5 * LAYER, -3), True),
-              ("lip", (0, (f + b) / 2, LIP_BOTTOM + 1.5), True),
-              ("slot for the inner layer", (0, -1.5 * LAYER, -9.5), False),
-              ("beside the tongue, above the plug", (8, -1.5, -1.5), False),
+              ("plug", (0, -PLUG_DEPTH / 2, -10), True),
+              ("tongue in the inner layer", (0, -1.5 * LAYER, 1.5), True),
+              ("tongue, near a flat side", (6.8, -1.5 * LAYER, -2.9), True),
+              ("disc", (0, (f + b) / 2, zd - DISC_R + 0.5), True),
+              ("disc's chamfer", (0, b + 0.2, zd - DISC_R + 0.2), False),
+              ("slot for the inner layer", (0, -1.5 * LAYER, -9.0), False),
+              ("beyond a flat side", (PLATE_W / 2 + 0.1, (f + b) / 2, zd), False),
               ("saddle", (0, 36, ARM_TOP - 4), True),
               ("above the saddle", (0, 36, ARM_TOP + 1), False),
               ("saddle chamfer", (PLATE_W / 2 - 0.4, 36, ARM_TOP - 0.4), False),
