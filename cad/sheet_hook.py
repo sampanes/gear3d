@@ -41,6 +41,7 @@ INNER_D = 16.6           # hole in the second layer (a 16.5 crest passes, 16.8 d
 LAYER = 2.75             # each layer; the inner layer's back is 2 * LAYER behind the face
 CEILING = 18.0           # desk underside above the hole centre
 SIDE_X = 16.5            # side wall, to one side of the hole centre
+BAND_R, BAND_T = 85.0, 20.0   # headband: inner radius, thickness with its cushion
 SIDE_DROP = (49.2, 34.4, 156.0)   # side wall reaches this far down from the ceiling: at the face,
                                   # at its far end, and how far out that end is
 
@@ -54,8 +55,9 @@ TONGUE_Z = (-6.0, -0.5)
 LIP_GAP = 0.5            # lip's front face behind the inner layer's back
 LIP_T, LIP_BOTTOM = 3.0, -11.5
 PLATE_W, PLATE_T = 26.0, 5.0
-PLATE_TOP, FOOT = 8.0, -46.0
-ARM_TOP = -38.0          # saddle top, below the side wall's lower edge
+PLATE_TOP, FOOT = 8.0, -60.0
+ARM_TOP = -52.0          # saddle top: the headband's top, cushion and all, clears the
+                         # side wall's lower edge
 SADDLE = (16.0, 56.0)    # flat saddle along y (a headband is about 40 wide)
 TIP, TIP_H = 62.0, 6.0   # tip lip keeps the band on
 CHAMFER = 3.0            # 45-degree chamfers on the saddle's top edges
@@ -241,10 +243,12 @@ def fit_numbers():
     out.append(("lip below the inner hole, hanging", overlap, 2.5, overlap >= 2.5))
     room = CEILING - (PLATE_TOP - drop + LIFT)
     out.append(("ceiling above the lifted plate", room, 2.0, room >= 2.0))
-    # the headband (about 85 radius) at the side wall's x stays below the side wall
-    sag = 85 - math.sqrt(85 ** 2 - SIDE_X ** 2)
-    worst = max(ARM_TOP - drop - sag - side_wall_bottom(y) for y in range(int(SADDLE[0]), int(TIP) + 1))
-    out.append(("headband below the side wall's lower edge (most negative is best)", worst, -4.0, worst <= -4.0))
+    # the top of the headband's cushion, where the band passes the side wall, stays below the
+    # wall's lower edge
+    sag = BAND_R - math.sqrt(BAND_R ** 2 - SIDE_X ** 2)
+    worst = max(ARM_TOP - drop + BAND_T - sag - side_wall_bottom(y) for y in range(int(SADDLE[0]), int(TIP) + 1))
+    out.append(("headband cushion top below the side wall's lower edge (most negative is best)", worst, -4.0,
+                worst <= -4.0))
     out.append(("plate edge from the side wall", SIDE_X - PLATE_W / 2, 2.0, SIDE_X - PLATE_W / 2 >= 2.0))
     return out
 

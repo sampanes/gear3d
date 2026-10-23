@@ -28,7 +28,7 @@ Front view, mm, hole centre at the origin:
 
 ## Shape
 
-- Plate against the face, 26 wide, from 8 above the hole centre down to 46 below.
+- Plate against the face, 26 wide, from 8 above the hole centre down to 60 below.
 - Plug (22.0 across, 2.5 deep) in the front hole, cut flat 2.6 below the centre: it rests on
   the front hole's bottom edge, which carries the load and centres the hook.
 - Tongue (10 wide) on through the inner hole, clear of its edge, and a lip behind the inner
@@ -37,9 +37,10 @@ Front view, mm, hole centre at the origin:
 - To hang it: lift it 5.6, push it in, drop it. The flat-topped plug still fits the front hole
   when lifted. Hanging, the load tips the hook outward: the lip catches the inner layer, the
   plate's foot bears on the face below. It comes off the same way, up then out.
-- Arm out from the foot to a flat saddle 40 long (a headband is about 40 wide), 38 below the
-  hole centre, so the headband clears the side wall's lower edge; a 6 lip at the tip keeps it
-  on. The saddle's top edges are 45-degree chamfers.
+- Arm out from the foot to a flat saddle 40 long (a headband is about 40 wide), 52 below the
+  hole centre: a headband 20 thick with its cushion (85 inner radius) still clears the side
+  wall's lower edge where it passes it (38 was too high for a cushioned band). A 6 lip at the
+  tip keeps it on. The saddle's top edges are 45-degree chamfers.
 - The plate and arm are one side profile extruded across the width; the plug and tongue are
   extruded from it. It prints lying on its side (the STL is in that pose), so the arm bends
   along its layers. The tongue and lip then start 8 above the bed with nothing under them
@@ -50,7 +51,7 @@ Front view, mm, hole centre at the origin:
 
 - From the dimensions: the lifted plug and the lifted tongue and lip fit their holes; hanging,
   the tongue clears the inner hole's edge and the lip reaches below it; the lifted plate clears
-  the ceiling; a headband (85 radius) on the saddle stays below the side wall's lower edge
-  along the saddle; the plate's edge clears the side wall.
+  the ceiling; the top of a 20-thick headband on the saddle stays 4 below the side wall's
+  lower edge along the saddle; the plate's edge clears the side wall.
 - Points inside and outside the exported solid: plate, plug, tongue, lip, saddle, tip lip
   solid; the slot for the inner layer, the saddle chamfer and above the saddle empty.
